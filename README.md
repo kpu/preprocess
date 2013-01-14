@@ -51,9 +51,10 @@ than 50% Latin characters.
 bin/process_unicode -l $language [--flatten] [--normalize] [--lower]
 ```
 Processes UTF8.
---lower lowercases
---normalize applies the ICU normalization function
---flatten applies a bunch of substitutions for punctuation
+
+* --lower lowercases
+* --normalize applies the ICU normalization function
+* --flatten applies a bunch of substitutions for punctuation
 
 ```
 bin/heuristics.perl -l $language
