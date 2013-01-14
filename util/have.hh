@@ -3,7 +3,7 @@
 #define UTIL_HAVE__
 
 #ifndef HAVE_ICU
-//#define HAVE_ICU
+#define HAVE_ICU
 #endif
 
 #ifndef HAVE_BOOST
