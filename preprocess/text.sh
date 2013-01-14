@@ -4,7 +4,7 @@ BINDIR="$(dirname "$0")"
 #Argument 1 is language, argument 2 is lowercase (1) or not (0)
 l="$1"
 if [ ${#l} != 2 ]; then
-  echo Usage: $0 lower language 1>&2
+  echo "Usage: \"$0 language lowercase\" where lowercase is 0 or 1." 1>&2
   exit 1
 fi
 if [ "$2" != 1 ] && [ "$2" != 0 ]; then
