@@ -45,7 +45,7 @@ bin/select_latin
 ```
 Removes lines that contain bad UTF8; contain control characters; have less than
 90% Latin, Common, or Inherited characters (except angle brackets); or have less
-than 50% Latin characters.
+than 50% Latin characters.  I used this for giga-fren.  
 
 ```
 bin/process_unicode -l $language [--flatten] [--normalize] [--lower]
