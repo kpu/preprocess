@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-#More preprocessing.  This assumes that avenue/util/process_unicode is run with at minimum --flatten 1 --normalize 1 first.  
+#More preprocessing.  This assumes that process_unicode is run with at minimum --flatten 1 --normalize 1 first.  
 
 use strict;
 use utf8;
