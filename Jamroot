@@ -11,7 +11,7 @@ build-project util ;
 
 install-bin-libs preprocess//programs ;
 install-headers headers : [ glob-tree *.hh : dist include ] : . ;
-install scripts : preprocess//heuristics.pl : <location>$(BINDIR) ;
+install scripts : preprocess//scripts : <location>$(BINDIR) <install-source-root>preprocess ;
 alias install : prefix-bin prefix-lib prefix-include scripts ;
 explicit headers ;
 explicit install ;
