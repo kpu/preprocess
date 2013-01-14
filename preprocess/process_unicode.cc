@@ -21,10 +21,10 @@ void ParseArgs(int argc, char *argv[], Options &out) {
   namespace po = boost::program_options;
   po::options_description desc("Unicode treatment options");
   desc.add_options()
-    ("language", po::value(&out.language)->default_value("en"), "Language (only applies to flatten)")
-    ("lower", po::value(&out.lower)->default_value(false), "Convert to lowercase")
-    ("flatten", po::value(&out.flatten)->default_value(false), "Canonicalize some characters for English")
-    ("normalize", po::value(&out.normalize)->default_value(false), "Normalize Unicode format");
+    ("language,l", po::value(&out.language)->default_value("en"), "Language (only applies to flatten)")
+    ("lower", po::bool_switch(&out.lower)->default_value(false), "Convert to lowercase")
+    ("flatten", po::bool_switch(&out.flatten)->default_value(false), "Canonicalize some characters for English")
+    ("normalize", po::bool_switch(&out.normalize)->default_value(false), "Normalize Unicode format");
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
