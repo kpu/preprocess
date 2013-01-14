@@ -6,7 +6,7 @@
 
 int main() {
   try {
-    util::FilePiece f(0, "stdin", &std::cerr);
+    util::FilePiece f(0, NULL, &std::cerr);
     while (true) {
       StringPiece l = f.ReadLine();
       if (l.size() > 2000) continue;
