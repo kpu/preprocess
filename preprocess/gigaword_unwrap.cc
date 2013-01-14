@@ -1,3 +1,4 @@
+#include "util/file_piece.hh"
 #include "util/string_piece.hh"
 
 #include <boost/unordered_map.hpp>
@@ -146,11 +147,17 @@ void MungeLine(std::string &line) {
   }
 }
 
-std::istream &ProcessText(std::istream &in, const std::string &close, std::ostream &out, std::string &dupe_detect) {
+void ProcessText(util::FilePiece &in, const std::string &close, std::ostream &out, std::string &dupe_detect) {
   bool content = false;
   std::string line;
-  while (getline(in, line) && (line != close)) {
-    if ((line[0] != '<') || (line[line.size() - 1] != '>')) {
+  StringPiece l;
+  while (true) {
+    try {
+      l = in.ReadLine();
+    } catch (const util::EndOfFileException &) { break; }
+    if (line == close) break;
+    if (l.empty() || (l.data()[0] != '<') || (l.data()[l.size() - 1] != '>')) {
+      line.assign(l.data(), l.size());
       MungeLine(line);
       if (!line.empty()) content = true;
       if (dupe_detect != line) {
@@ -164,13 +171,16 @@ std::istream &ProcessText(std::istream &in, const std::string &close, std::ostre
   }
   // Why two lines?  This is intended to be piped to the sentence breaker.  
   if (content) out << "\n<P>\n";
-  return in;
 }
 
-void ProcessGigaword(std::istream &in, std::ostream &out) {
+void ProcessGigaword(util::FilePiece &in, std::ostream &out) {
   const std::string head_close("</HEADLINE>"), p_close("</P>"), date_close("</DATELINE>"), text_close("</TEXT>");
-  std::string line, dupe_detect;
-  while (getline(in, line)) {
+  StringPiece line;
+  std::string dupe_detect;
+  while (true) {
+    try {
+      line = in.ReadLine();
+    } catch (const util::EndOfFileException &) { return; }
     if (line == "<HEADLINE>") {
       ProcessText(in, head_close, out, dupe_detect);
     } else if (line == "<P>") {
@@ -196,6 +206,8 @@ int main() {
   nyt_parentheses_set["(AT)"] = "@";
   nyt_parentheses_set["(EQUALS)"] = "=";
 
-  ProcessGigaword(std::cin, std::cout);
+  util::FilePiece in(0, NULL, &std::cerr);
+
+  ProcessGigaword(in, std::cout);
   return 0;
 }
