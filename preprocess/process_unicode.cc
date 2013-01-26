@@ -7,6 +7,7 @@
 #include <unicode/unistr.h>
 #include <unicode/ustream.h>
 
+#include <algorithm>
 #include <string>
 #include <iostream>
 
@@ -36,19 +37,21 @@ int main(int argc, char *argv[]) {
   ParseArgs(argc, argv, opt);
   utf8::Flatten flatten(opt.language);
   std::string line, normalized;
+  UnicodeString str[2];
+  UnicodeString *cur = &str[0], *tmp = &str[1];
   while (getline(std::cin, line)) {
-    UnicodeString str(UnicodeString::fromUTF8(line));
+    *cur = UnicodeString::fromUTF8(line);
     if (opt.lower) {
-      str.toLower();
+      cur->toLower();
     }
     if (opt.flatten) {
-      UnicodeString tmp = str;
-      flatten.Apply(tmp, str);
+      flatten.Apply(*cur, *tmp);
+      std::swap(cur, tmp);
     }
     if (opt.normalize) {
-      UnicodeString tmp = str;
-      utf8::Normalize(tmp, str);
+      utf8::Normalize(*cur, *tmp);
+      std::swap(cur, tmp);
     }
-    std::cout << str << '\n';
+    std::cout << *str << '\n';
   }
 }
