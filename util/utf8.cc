@@ -2,6 +2,7 @@
 
 #include "util/scoped.hh"
 #include "util/string_piece.hh"
+#include "util/string_piece_hash.hh"
 
 #include <boost/scoped_array.hpp>
 #include <boost/scoped_ptr.hpp>
