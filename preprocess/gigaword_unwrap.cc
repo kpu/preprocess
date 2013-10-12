@@ -1,5 +1,6 @@
 #include "util/file_piece.hh"
 #include "util/string_piece.hh"
+#include "util/string_piece_hash.hh"
 
 #include <boost/unordered_map.hpp>
 
