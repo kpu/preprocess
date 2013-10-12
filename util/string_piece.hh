@@ -59,6 +59,7 @@
 #include <unicode/uversion.h>
 
 U_NAMESPACE_BEGIN
+
 // Old versions of ICU don't define operator== and operator!=.
 #if (U_ICU_VERSION_MAJOR_NUM < 4) || ((U_ICU_VERSION_MAJOR_NUM == 4) && (U_ICU_VERSION_MINOR_NUM < 4))
 #warning You are using an old version of ICU.  Consider upgrading to ICU >= 4.6.
