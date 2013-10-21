@@ -31,16 +31,16 @@ int main(int argc, char *argv[]) {
       // Strip leading spaces
       in.SkipSpaces();
       StringPiece l = in.ReadLine();
-      std::cerr << l.size() << std::endl;
+
       // Remove lines beginning with Christian's magic token.
       if (starts_with(l, remove_line)) continue;
       // Strip trailing spaces
       while (l.size() && util::kSpaces[static_cast<unsigned char>(l.data()[l.size() - 1])]) {
         l = StringPiece(l.data(), l.size() - 1);
       }
+
       Entry entry;
       Table::MutableIterator it;
-      std::cerr << "Before hash " << l.size() << std::endl;
       entry.key = util::MurmurHashNative(l.data(), l.size()) + 1;
       if (!table.FindOrInsert(entry, it)) {
         out << l << '\n';
