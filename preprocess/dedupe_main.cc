@@ -38,8 +38,6 @@ int main(int argc, char *argv[]) {
           table.Double(table_backing.get());
           double_cutoff *= 2;
         }
-      } else {
-        std::cerr << "Already seen " << entry.key << ' ' << l << std::endl;
       }
     }
   } 
