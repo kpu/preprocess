@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
 
       Entry entry;
       Table::MutableIterator it;
-      entry.key = util::MurmurHashNative(l.data(), l.size()) + 1;
+      entry.key = util::MurmurHashNative(l.data(), l.size(), 1);
       if (!table.FindOrInsert(entry, it)) {
         out << l << '\n';
         if (table.SizeNoSerialization() > double_cutoff) {
