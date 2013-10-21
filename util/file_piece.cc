@@ -69,12 +69,15 @@ StringPiece FilePiece::ReadLine(char delim) {
     for (const char *i = position_ + skip; i < position_end_; ++i) {
       if (*i == delim) {
         StringPiece ret(position_, i - position_);
+        std::cerr << "Returning with " << ret.size() << std::endl;
         position_ = i + 1;
         return ret;
       }
     }
     if (at_end_) {
-      if (position_ == position_end_) Shift();
+      if (position_ == position_end_) {
+        Shift();
+      }
       return Consume(position_end_);
     }
     skip = position_end_ - position_;
