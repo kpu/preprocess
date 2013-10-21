@@ -25,12 +25,12 @@ int main(int argc, char *argv[]) {
     Table table(table_backing.get(), Table::Size(estimate, 1.5));
     std::size_t double_cutoff = estimate * 1.2;
     util::FakeOFStream out(1);
-    util::FilePiece in(0, "stdin", &std::cerr);
+    util::FilePiece in(0, "stdin", NULL);
     while (true) {
       StringPiece l = in.ReadLine();
       Entry entry;
       Table::MutableIterator it;
-      entry.key = util::MurmurHashNative(l.data(), l.size());
+      entry.key = util::MurmurHashNative(l.data(), l.size()) + 1;
       if (!table.FindOrInsert(entry, it)) {
         out << l << '\n';
         if (table.SizeNoSerialization() > double_cutoff) {
