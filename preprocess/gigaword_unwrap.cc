@@ -156,7 +156,7 @@ void ProcessText(util::FilePiece &in, const std::string &close, std::ostream &ou
     try {
       l = in.ReadLine();
     } catch (const util::EndOfFileException &) { break; }
-    if (line == close) break;
+    if (l == close) break;
     if (l.empty() || (l.data()[0] != '<') || (l.data()[l.size() - 1] != '>')) {
       line.assign(l.data(), l.size());
       MungeLine(line);
