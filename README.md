@@ -23,7 +23,13 @@ lines.
 bin/moses/ems/support/split-sentences.perl -l $language
 ```
 is the Moses/Europarl sentence splitter with a bugfix to also split sentences
-separated by two spaces.
+separated by two spaces. 
+
+```
+bin/resplit.sh $language
+```
+preserves existing line breaks and introduces additional breaks when multiple sentences appear in the same line.  This is useful when you want to use the target side of parallel corpora for language modeling.  
+
 
 ```
 bin/gigaword_extract.sh $language
