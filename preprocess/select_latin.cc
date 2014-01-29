@@ -40,7 +40,7 @@ int main() {
       line = in.ReadLine();
     } catch (const util::EndOfFileException &e) { break; }
     if (Include(line))
-      out << line;
+      out << line << '\n';
   }
   return 0;
 }
