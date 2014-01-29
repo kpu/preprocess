@@ -1,12 +1,13 @@
 #include "util/fake_ofstream.hh"
 #include "util/file_piece.hh"
 
-#include <unicode/uchar.h>
-#include <unicode/uscript.h>
-
 #include <iostream>
 #include <numeric>
+
+#include <stdint.h>
 #include <string.h>
+#include <unicode/uchar.h>
+#include <unicode/uscript.h>
 
 bool Include(const StringPiece &line) {
   int32_t offset = 0;
@@ -35,12 +36,17 @@ int main() {
   util::FilePiece in(0);
   util::FakeOFStream out(1);
   StringPiece line;
+  uint64_t input = 0, output = 0;
   while (true) {
     try {
       line = in.ReadLine();
     } catch (const util::EndOfFileException &e) { break; }
-    if (Include(line))
+    ++input;
+    if (Include(line)) {
       out << line << '\n';
+      ++output;
+    }
   }
+  std::cerr << "Kept " << input << " / " << output << " = " << (static_cast<float>(output) / static_cast<float>(input)) << std::endl;
   return 0;
 }
