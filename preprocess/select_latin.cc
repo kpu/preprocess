@@ -1,3 +1,6 @@
+#include "util/fake_ofstream.hh"
+#include "util/file_piece.hh"
+
 #include <unicode/uchar.h>
 #include <unicode/uscript.h>
 
@@ -5,7 +8,7 @@
 #include <numeric>
 #include <string.h>
 
-bool Include(const std::string &line) {
+bool Include(const StringPiece &line) {
   int32_t offset = 0;
   int32_t length = static_cast<int32_t>(line.size());
   size_t counts[USCRIPT_CODE_LIMIT];
@@ -29,8 +32,15 @@ bool Include(const std::string &line) {
 }
 
 int main() {
-  std::string line;
-  while (getline(std::cin, line)) {
-    if (Include(line)) std::cout << line << '\n';
+  util::FilePiece in(0);
+  util::FakeOFStream out(1);
+  StringPiece line;
+  while (true) {
+    try {
+      line = in.ReadLine();
+    } catch (const util::EndOfFileException &e) { break; }
+    if (Include(line))
+      out << line;
   }
+  return 0;
 }
