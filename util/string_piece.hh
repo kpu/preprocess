@@ -58,8 +58,6 @@
 #include <unicode/stringpiece.h>
 #include <unicode/uversion.h>
 
-U_NAMESPACE_BEGIN
-
 // Old versions of ICU don't define operator== and operator!=.
 #if (U_ICU_VERSION_MAJOR_NUM < 4) || ((U_ICU_VERSION_MAJOR_NUM == 4) && (U_ICU_VERSION_MINOR_NUM < 4))
 #warning You are using an old version of ICU.  Consider upgrading to ICU >= 4.6.
@@ -74,6 +72,8 @@ inline bool operator!=(const StringPiece& x, const StringPiece& y) {
   return !(x == y);
 }
 #endif // old version of ICU
+
+U_NAMESPACE_BEGIN
 
 inline bool starts_with(const StringPiece& longer, const StringPiece& prefix) {
   int longersize = longer.size(), prefixsize = prefix.size();

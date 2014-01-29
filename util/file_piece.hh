@@ -74,7 +74,7 @@ class FilePiece {
           // And break out at end of file.
           if (position_ == position_end_) return;
         }
-        assert(position_ <= position_end_);
+        assert(position_ < position_end_);
         if (!delim[static_cast<unsigned char>(*position_)]) return;
       }
     }
