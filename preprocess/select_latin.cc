@@ -33,7 +33,7 @@ bool Include(const StringPiece &line) {
 }
 
 int main() {
-  util::FilePiece in(0);
+  util::FilePiece in(0, &std::cerr);
   util::FakeOFStream out(1);
   StringPiece line;
   uint64_t input = 0, output = 0;
