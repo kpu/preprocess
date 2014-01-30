@@ -25,6 +25,8 @@ alias icu : : : : <linkflags>$(icuflags) ;
 
 lib kenutil : ersatz_progress.cc exception.cc file.cc file_piece.cc mmap.cc murmur_hash.cc read_compressed scoped.cc string_piece.cc utf8.cc icu /top//boost_thread double-conversion//double-conversion : <include>..  <os>LINUX,<threading>single:<source>rt : : <include>.. ;
 
+exe cat_compressed : cat_compressed_main.cc kenutil ;
+
 import testing ;
 
 run file_piece_test.o kenutil /top//boost_unit_test_framework : : file_piece.cc ;
