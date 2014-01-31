@@ -12,7 +12,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
   uint64_t input = 0, output = 0;
   if (argc == 1) {
     StringPiece line;
-    util::FilePiece in(0);
+    util::FilePiece in(0, NULL, &std::cerr);
     util::FakeOFStream out(1);
     while (true) {
       try {
