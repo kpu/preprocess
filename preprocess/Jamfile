@@ -9,6 +9,6 @@ exe vocab : vocab_main.cc ../util//kenutil ;
 exe remove_long_lines : remove_long_lines.cc ../util//kenutil ;
 exe process_unicode : process_unicode.cc ../util//kenutil /top//boost_program_options icui18n icuio ;
 
-alias programs : select_latin gigaword_unwrap dedupe dedupe_custom vocab remove_long_lines process_unicode ;
+alias programs : select_latin gigaword_unwrap dedupe dedupe_custom vocab remove_long_lines process_unicode truecase ;
 
 alias scripts : [ glob moses/share/nonbreaking_prefixes/* ] [ glob-tree *.perl *.sh ] ;
