@@ -27,6 +27,8 @@ class Truecase {
       void SetKey(uint64_t to) { key = to; }
       
       const char *best;
+      // If only the uppercase version is known, the lowercase version will still be in the hash table.
+      bool known;
       bool sentence_end;
       bool delayed_sentence_start;
     };
@@ -36,23 +38,28 @@ class Truecase {
       entry.key = Hash(word);
       entry.sentence_end = false;
       entry.delayed_sentence_start = false;
+      entry.known = true;
       Table::MutableIterator it;
       if (!table_.FindOrInsert(entry, it)) {
         char *start = static_cast<char*>(memcpy(string_pool_.Allocate(word.size() + 1), word.data(), word.size()));
         start[word.size()] = '\0';
         it->best = start;
+      } else {
+        it->known = true;
       }
       return *it;
     }
 
-    void InsertKnown(StringPiece word, const char *best) {
+    void InsertFollow(StringPiece word, const char *best, bool known) {
       TableEntry entry;
       entry.key = Hash(word);
       entry.sentence_end = false;
       entry.delayed_sentence_start = false;
       entry.best = best;
+      entry.known = known;
       Table::MutableIterator it;
       table_.FindOrInsert(entry, it);
+      it->known |= known;
     }
 
     util::Pool string_pool_;
@@ -79,12 +86,12 @@ Truecase::Truecase(const char *file) {
     const TableEntry &top = Insert(word);
     utf8::ToLower(word, lower);
     if (word != lower) {
-      InsertKnown(lower, top.best);
+      InsertFollow(lower, top.best, false);
     }
-    // Discard every other token (which is statistics)
+    // Discard every other token (these are statistics)
     while (f.ReadWordSameLine(word) && f.ReadWordSameLine(word)) {
       // These secondary casings reference the same best casing.
-      InsertKnown(word, top.best);
+      InsertFollow(word, top.best, true);
     }
   }
 }
@@ -95,7 +102,7 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
     const TableEntry *entry;
     bool entry_found = table_.Find(Hash(*word), entry);
     // If they're known and not the beginning of sentence, pass through.
-    if (entry_found && !sentence_start) {
+    if (entry_found && entry->known && !sentence_start) {
       out << *word;
     } else {
       utf8::ToLower(*word, temp);
