@@ -6,6 +6,8 @@
 #include "util/tokenize_piece.hh"
 #include "util/utf8.hh"
 
+#include <string.h>
+
 uint64_t Hash(const StringPiece &str) {
   return util::MurmurHashNative(str.data(), str.size());
 }
@@ -112,6 +114,8 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
       } else if (!entry->delayed_sentence_start) {
         sentence_start = false;
       }
+    } else {
+      sentence_start = false;
     }
     if (++word) out << ' ';
   }
@@ -119,7 +123,7 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
 }
 
 int main(int argc, char *argv[]) {
-  if (argc != 3 || strcmp(argv[1], "--model")) {
+  if (argc != 3 || (strcmp(argv[1], "--model") && strcmp(argv[1], "-model"))) {
     std::cerr << "truecase --model $model <in >out" << std::endl;
     return 1;
   }
