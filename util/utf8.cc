@@ -6,8 +6,9 @@
 
 #include <boost/scoped_array.hpp>
 #include <boost/scoped_ptr.hpp>
-#include <boost/unordered_map.hpp>
 #include <boost/thread/once.hpp>
+#include <boost/unordered_map.hpp>
+#include <boost/utility.hpp>
 
 #include <unicode/normlzr.h>
 #include <unicode/ucasemap.h>
@@ -67,11 +68,11 @@ void ToLower(const UnicodeString &in, UnicodeString &out) {
 }
 
 namespace {
-class CaseMapWrap {
+class CaseMapWrap : boost::noncopyable {
   public:
     CaseMapWrap() : case_map_(NULL) {}
 
-    void operator()() {
+    void Init() {
       UErrorCode err_csm = U_ZERO_ERROR;
       case_map_ = ucasemap_open(NULL, 0, &err_csm);
       if (U_FAILURE(err_csm)) {
@@ -96,27 +97,34 @@ CaseMapWrap kCaseMap;
 
 boost::once_flag CaseMapFlag = BOOST_ONCE_INIT;
 
+void InitCaseMap() {
+  kCaseMap.Init();
+}
+
 const UCaseMap *GetCaseMap() {
-  boost::call_once(CaseMapFlag, kCaseMap);
+  boost::call_once(CaseMapFlag, InitCaseMap);
   return kCaseMap.Get();
 }
 
 } // namespace
 
 void ToLower(const StringPiece &in, std::string &out) throw(NotUTF8Exception) {
-  out.clear();
-
   const UCaseMap *csm = GetCaseMap();
   UErrorCode err_lower = U_ZERO_ERROR;
-  size_t need = ucasemap_utf8ToLower(csm, NULL, 0, in.data(), in.size(), &err_lower);
-  if (err_lower == U_BUFFER_OVERFLOW_ERROR) err_lower = U_ZERO_ERROR;
-  if (U_FAILURE(err_lower)) throw NotUTF8Exception(in, err_lower);
-
-  // Annoying copy here :-(
-  boost::scoped_array<char> temp(new char[need + 1]);
-  ucasemap_utf8ToLower(csm, temp.get(), need, in.data(), in.size(), &err_lower);
-  if (U_FAILURE(err_lower)) throw NotUTF8Exception(in, err_lower);
-  out.assign(temp.get(), need);
+  size_t need = ucasemap_utf8ToLower(csm, &out[0], out.size(), in.data(), in.size(), &err_lower);
+  if (err_lower == U_BUFFER_OVERFLOW_ERROR) {
+    err_lower = U_ZERO_ERROR;
+  } else if (U_FAILURE(err_lower)) {
+    throw NotUTF8Exception(in, err_lower);
+  }
+  if (need > out.size()) {
+    out.resize(need);
+    // Try again with a bigger buffer.
+    ucasemap_utf8ToLower(csm, &out[0], need, in.data(), in.size(), &err_lower);
+    if (U_FAILURE(err_lower)) throw NotUTF8Exception(in, err_lower);
+  } else {
+    out.resize(need);
+  }
 }
 
 void Normalize(const UnicodeString &in, UnicodeString &out) throw(NotUTF8Exception, NormalizeException) {
