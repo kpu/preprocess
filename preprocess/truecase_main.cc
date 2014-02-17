@@ -105,7 +105,12 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
     if (entry_found && entry->known && !sentence_start) {
       out << *word;
     } else {
-      utf8::ToLower(*word, temp);
+      try {
+        utf8::ToLower(*word, temp);
+      } catch (const utf8::NotUTF8Exception &e) {
+        std::cerr << e.what() << "\nSkipping this word.\n";
+        continue;
+      }
       const TableEntry *lower;
       if (table_.Find(Hash(temp), lower)) {
         // If there's a best form, print it.

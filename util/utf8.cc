@@ -110,20 +110,20 @@ const UCaseMap *GetCaseMap() {
 
 void ToLower(const StringPiece &in, std::string &out) throw(NotUTF8Exception) {
   const UCaseMap *csm = GetCaseMap();
-  UErrorCode err_lower = U_ZERO_ERROR;
-  size_t need = ucasemap_utf8ToLower(csm, &out[0], out.size(), in.data(), in.size(), &err_lower);
-  if (err_lower == U_BUFFER_OVERFLOW_ERROR) {
-    err_lower = U_ZERO_ERROR;
-  } else if (U_FAILURE(err_lower)) {
-    throw NotUTF8Exception(in, err_lower);
-  }
-  if (need > out.size()) {
-    out.resize(need);
-    // Try again with a bigger buffer.
-    ucasemap_utf8ToLower(csm, &out[0], need, in.data(), in.size(), &err_lower);
-    if (U_FAILURE(err_lower)) throw NotUTF8Exception(in, err_lower);
-  } else {
-    out.resize(need);
+  while (true) {
+    UErrorCode err_lower = U_ZERO_ERROR;
+    size_t need = ucasemap_utf8ToLower(csm, &out[0], out.size(), in.data(), in.size(), &err_lower);
+    if (err_lower == U_BUFFER_OVERFLOW_ERROR) {
+      // Hopefully ensure convergence.
+      out.resize(std::max(out.size(), need) + 10);
+    } else if (U_FAILURE(err_lower)) {
+      throw NotUTF8Exception(in, err_lower);
+    } else if (need > out.size()) {
+      out.resize(need + 10);
+    } else {
+      out.resize(need);
+      return;
+    }
   }
 }
 
