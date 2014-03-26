@@ -111,7 +111,7 @@ uint64_t SizeOrThrow(int fd) {
 
 void ResizeOrThrow(int fd, uint64_t to) {
 #if defined __MINGW32__
-    // Does this handle 64-bit?  
+    // Does this handle 64-bit?
     int ret = ftruncate
 #elif defined(_WIN32) || defined(_WIN64)
     errno_t ret = _chsize_s
@@ -128,8 +128,10 @@ namespace {
 std::size_t GuardLarge(std::size_t size) {
   // The following operating systems have broken read/write/pread/pwrite that
   // only supports up to 2^31.
+  // OS X man pages claim to support 64-bit, but Kareem M. Darwish had problems
+  // building with larger files, so APPLE is also here.
 #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__) || defined(OS_ANDROID) || defined(__MINGW32__)
-  return std::min(static_cast<std::size_t>(static_cast<unsigned>(-1)), size);
+  return size < INT_MAX ? size : INT_MAX;
 #else
   return size;
 #endif
@@ -442,8 +444,8 @@ void NormalizeTempPrefix(std::string &base) {
     ) base += '/';
 }
 
-int MakeTemp(const std::string &base) {
-  std::string name(base);
+int MakeTemp(const StringPiece &base) {
+  std::string name(base.data(), base.size());
   name += "XXXXXX";
   name.push_back(0);
   int ret;
@@ -451,7 +453,7 @@ int MakeTemp(const std::string &base) {
   return ret;
 }
 
-std::FILE *FMakeTemp(const std::string &base) {
+std::FILE *FMakeTemp(const StringPiece &base) {
   util::scoped_fd file(MakeTemp(base));
   return FDOpenOrThrow(file);
 }
@@ -477,14 +479,18 @@ bool TryName(int fd, std::string &out) {
   if (-1 == lstat(name.c_str(), &sb))
     return false;
   out.resize(sb.st_size + 1);
-  ssize_t ret = readlink(name.c_str(), &out[0], sb.st_size + 1);
-  if (-1 == ret)
-    return false;
-  if (ret > sb.st_size) {
-    // Increased in size?!
-    return false;
+  // lstat gave us a size, but I've seen it grow, possibly due to symlinks on top of symlinks.
+  while (true) {
+    ssize_t ret = readlink(name.c_str(), &out[0], out.size());
+    if (-1 == ret)
+      return false;
+    if (ret < out.size()) {
+      out.resize(ret);
+      break;
+    }
+    // Exponential growth.
+    out.resize(out.size() * 2);
   }
-  out.resize(ret);
   // Don't use the non-file names.
   if (!out.empty() && out[0] != '/')
     return false;
