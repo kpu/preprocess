@@ -187,7 +187,12 @@ template <class T> T FilePiece::ReadNumber() {
   const char *end = last_space_;
   T ret;
   ParseNumber(position_, end, ret);
-  if (end == position_) throw ParseNumberException(ReadDelimited());
+  if (end == position_) {
+    // There must be a space because last_space_ >= position_.
+    const char *first_space;
+    for (first_space = position_; !kSpaces[static_cast<unsigned char>(*first_space)]; ++first_space) {}
+    throw ParseNumberException(StringPiece(position_, first_space - position_));
+  }
   position_ = end;
   return ret;
 }
