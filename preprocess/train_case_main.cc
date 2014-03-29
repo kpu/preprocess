@@ -71,23 +71,49 @@ int main(int argc, char *argv[]) {
   util::FilePiece align(argv[1], &std::cerr), source_file(argv[2]), target_file(argv[3]);
   std::vector<StringPiece> source_words, target_words;
   Recorder recorder;
-  while (true) {
+  std::size_t sentence = 0, discarded = 0;
+  for (; ; ++sentence) {
     try {
       SplitLine(source_file, source_words);
     } catch (const util::EndOfFileException &e) { break; }
     SplitLine(target_file, target_words);
-    while (SameLine(align)) {
-      unsigned long first = align.ReadULong();
-      UTIL_THROW_IF2(align.get() != '-', "Bad alignment");
-      UTIL_THROW_IF2(align.peek() < '0' || align.peek() > '9', "Expected number for alignment, not " << align.peek());
-      unsigned long second = align.ReadULong();
-      UTIL_THROW_IF2(first >= source_words.size(), "Index " << first << " too high for source text");
-      UTIL_THROW_IF2(second >= target_words.size(), "Index " << second << " too high for target text");
-      // Throw out beginning of sentence.
-      if (first != 0 && second != 0) {
-        recorder.Add(source_words[first], target_words[second]);
-      }
+    // parse comment lone
+    // "# sentence pair (0) source length"
+    for (unsigned int i = 0; i < 6; ++i) {
+      align.ReadDelimited();
     }
+    unsigned long from_length = align.ReadULong();
+    align.ReadDelimited(); align.ReadDelimited(); // target length
+    unsigned long to_length = align.ReadULong();
+    align.ReadLine(); // comment line ending
+
+    align.ReadLine(); // uncased sentence
+    StringPiece word(align.ReadDelimited());
+    UTIL_THROW_IF2("NULL" != word, "Expected NULL at the beginning, not " << word);
+
+    if (from_length != source_words.size() || to_length != target_words.size()) {
+      align.ReadLine(); // Complete line.
+      ++discarded;
+      continue;
+    }
+
+    while ("})" != align.ReadDelimited()) {}
+    for (unsigned long from = 0; align.ReadWordSameLine(word); ++from) {
+      align.ReadWordSameLine(word);
+      UTIL_THROW_IF2(word != "({", "Expected ({ not " << word);
+      UTIL_THROW_IF2(from >= source_words.size(), "Index " << from << " too high for source text at sentence " << sentence);
+      for (align.SkipSpaces(); align.peek() != '}'; align.SkipSpaces()) {
+        unsigned long to = align.ReadULong() - 1 /* NULL word */;
+        UTIL_THROW_IF2(to >= target_words.size(), "Index " << to << " too high for target text");
+        // Throw out beginning of sentence.
+        if (from != 0 && to != 0) {
+          recorder.Add(source_words[from], target_words[to]);
+        }
+      }
+      UTIL_THROW_IF2(align.ReadDelimited() != "})", "Expected })");
+    }
+    align.ReadLine(); // Complete line.
   }
+  std::cerr << "Discarded " << discarded << "/" << sentence << std::endl;
   recorder.Dump();
 }
