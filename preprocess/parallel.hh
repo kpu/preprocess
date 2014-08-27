@@ -51,7 +51,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
       "To filter parallel files, run\n" << argv[0] << "in0 in1 out0 out1\n";
     return 1;
   }
-  std::cerr << "Kept " << input << " / " << output << " = " << (static_cast<float>(output) / static_cast<float>(input)) << std::endl;
+  std::cerr << "Kept " << output << " / " << input << " = " << (static_cast<float>(output) / static_cast<float>(input)) << std::endl;
   return 0;
 }
 
