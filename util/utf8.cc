@@ -46,9 +46,18 @@ NormalizeException::NormalizeException(const UnicodeString &original, UErrorCode
   what_.append(u_errorName(code));
 }
 
+bool IsUTF8(const StringPiece &str) {
+  int32_t offset = 0;
+  int32_t length = static_cast<uint32_t>(str.size());
+  while (offset < length) {
+    UChar32 character;
+    U8_NEXT(str.data(), offset, (int32_t)str.size(), character);
+    if (character < 0) return false;
+  }
+  return true;
+}
+
 bool IsPunctuation(const StringPiece &str) throw(NotUTF8Exception) {
-  // TODO: is this MEMT-hack desirable?
-  if (*str.data() == '\'' || str == "n't") return true;
   int32_t offset = 0;
   int32_t length = static_cast<uint32_t>(str.size());
   while (offset < length) {

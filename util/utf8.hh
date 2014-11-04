@@ -61,6 +61,8 @@ class UnsupportedLanguageException : public std::exception {
     std::string what_;
 };
 
+bool IsUTF8(const StringPiece &text);
+
 bool IsPunctuation(const StringPiece &text) throw(NotUTF8Exception);
 
 // TODO: Implement these in a way that doesn't botch Turkish.
