@@ -13,6 +13,6 @@ exe truecase : truecase_main.cc ../util//kenutil ;
 exe train_case : train_case_main.cc ../util//kenutil ;
 exe apply_case : apply_case_main.cc ../util//kenutil ;
 
-alias programs : select_latin gigaword_unwrap dedupe dedupe_custom vocab remove_long_lines process_unicode train_case apply_case truecase ;
+alias programs : select_latin gigaword_unwrap dedupe dedupe_custom vocab remove_long_lines remove_invalid_utf8 process_unicode train_case apply_case truecase ;
 
 alias scripts : [ glob moses/share/nonbreaking_prefixes/* ] [ glob-tree *.perl *.sh ] ;

@@ -28,9 +28,12 @@ cflags = [ os.environ "CFLAGS" ] ;
 ldflags = [ os.environ "LDFLAGS" ] ;
 
 #Run g++ with empty main and these arguments to see if it passes.  
-rule test_flags ( flags * ) {
+rule test_flags ( flags * : main ? ) {
   flags = $(cxxflags) $(ldflags) $(flags) ;
-  local cmd = "bash -c \"g++ "$(flags:J=" ")" -x c++ - <<<'int main() {}' -o $(TOP)/dummy >/dev/null 2>/dev/null && rm $(TOP)/dummy 2>/dev/null\"" ;
+  if ! $(main) {
+    main = "int main() {}" ;
+  }
+  local cmd = "bash -c \"g++ "$(flags:J=" ")" -x c++ - <<<'$(main)' -o $(TOP)/dummy >/dev/null 2>/dev/null && rm $(TOP)/dummy 2>/dev/null\"" ;
   local ret = [ SHELL $(cmd) : exit-status ] ;
   if --debug-configuration in [ modules.peek : ARGV ] {
     echo $(cmd) ;
@@ -56,7 +59,7 @@ if $(FORCE-STATIC) {
 
 rule test_library ( name ) {
   if $(FORCE-STATIC) {
-    return [ test_flags "-l$(name) -static" ] ;
+    return [ test_flags "-Wl,-Bstatic -l$(name) -Wl,-Bdynamic" ] ;
   } else {
     return [ test_flags "-l$(name)" ] ;
   }
@@ -71,17 +74,30 @@ rule test_library ( name ) {
   constant CLEANING : $(cleaning) ;
 }
 
+shared-command-line = ;
+local argv = [ modules.peek : ARGV ] ;
+while $(argv) {
+  if $(argv[1]) = "link=shared" {
+    shared-command-line = <link>shared ;
+  }
+  argv = $(argv[2-]) ;
+}
+
 #Determine if a library can be compiled statically.  
 rule auto-shared ( name : additional * ) {
   additional ?= "" ;
-  if [ test_flags $(additional)" -static -l"$(name) ] {
-    return ;
+  if $(shared-command-line) = "<link>shared" {
+    return "<link>shared" ;
   } else {
-    if $(FORCE-STATIC) {
-      echo "Could not statically link against lib $(name).  Your build will probably fail." ;
+    if [ test_flags $(additional)" -Wl,-Bstatic -l"$(name)" -Wl,-Bdynamic" ] {
       return ;
     } else {
-      return "<link>shared" ;
+      if $(FORCE-STATIC) {
+        echo "Could not statically link against lib $(name).  Your build will probably fail." ;
+        return ;
+      } else {
+        return "<link>shared" ;
+      }
     }
   }
 }
@@ -96,6 +112,7 @@ if $(with-macports) {
   boost-search = <search>$(with-macports)/lib ;
   I-boost-include = -I$(with-macports)/include ;
   boost-include = <include>$(with-macports)/include ;
+  requirements += $(boost-include) ;
 } else {
   with-boost = [ option.get "with-boost" ] ;
   with-boost ?= [ os.environ "BOOST_ROOT" ] ;
@@ -104,6 +121,7 @@ if $(with-macports) {
     boost-search = <search>$(with-boost)/lib <search>$(with-boost)/lib64 ;
     I-boost-include = -I$(with-boost)/include ;
     boost-include = <include>$(with-boost)/include ;
+    requirements += $(boost-include) ;
   } else {
     L-boost-search = "" ;
     boost-search = ;
@@ -114,21 +132,30 @@ if $(with-macports) {
  
 #Convenience rule for boost libraries.  Defines library boost_$(name).  
 rule boost-lib ( name macro : deps * ) {
-  #Link multi-threaded programs against the -mt version if available.  Old 
-  #versions of boost do not have -mt tagged versions of all libraries.   Sadly,
-  #boost.jam does not handle this correctly.  
-  flags = $(L-boost-search)" -lboost_"$(name)"-mt$(boost-lib-version)" ;
-  if $(boost-auto-shared) != "<link>shared" {
-    flags += " -static" ;
+  flags = $(L-boost-search)" -lboost_"$(name)"$(boost-lib-version)" ;
+  local main ;
+  if $(name) = "unit_test_framework" {
+    main = "BOOST_AUTO_TEST_CASE(foo) {}" ;
+    flags += " -DBOOST_TEST_MODULE=CompileTest $(I-boost-include) -include boost/test/unit_test.hpp" ;
   }
-  if [ test_flags $(flags) ] {
-    lib inner_boost_$(name) : : <threading>single $(boost-search) <name>boost_$(name)$(boost-lib-version) : : <library>$(deps) ;
-    lib inner_boost_$(name) : : <threading>multi $(boost-search) <name>boost_$(name)-mt$(boost-lib-version) : : <library>$(deps) ;
+  if $(boost-auto-shared) = "<link>shared" {
+    flags += " -DBOOST_$(macro)" ;
+  } else {
+    flags = " -Wl,-Bstatic $(flags) -Wl,-Bdynamic " ;
+  }
+  if [ test_flags $(flags) : $(main) ] {
+    lib inner_boost_$(name) : : <threading>single $(boost-search) <name>boost_$(name)$(boost-lib-version) : <link>static : <library>$(deps) ;
+    lib inner_boost_$(name) : : <threading>multi $(boost-search) <name>boost_$(name)$(boost-lib-version) : <link>static : <library>$(deps) ;
   } else {
     lib inner_boost_$(name) : : $(boost-search) <name>boost_$(name)$(boost-lib-version) : : <library>$(deps) ;
   }
 
-  alias boost_$(name) : inner_boost_$(name) : $(boost-auto-shared) : : <link>shared:<define>BOOST_$(macro) $(boost-include) ;
+  if $(boost-auto-shared) = "<link>shared" {
+    alias boost_$(name) : inner_boost_$(name) : <link>shared ;
+    requirements += <define>BOOST_$(macro) ;
+  } else {
+    alias boost_$(name) : inner_boost_$(name) : <link>static ;
+  }
 }
 
 #Argument is e.g. 103600
@@ -139,9 +166,9 @@ rule boost ( min-version ) {
     echo Failed to run "$(cmd)" ;
     exit Boost does not seem to be installed or g++ is confused. : 1 ;
   }
-  boost-version = [ MATCH "#define BOOST_VERSION ([0-9]*)" : $(boost-shell[1]) ] ;
-  if $(boost-version) < $(min-version) && $(CLEANING) = no {
-    exit You have Boost $(boost-version).  This package requires Boost at least $(min-version) (and preferably newer). : 1 ;
+  constant BOOST-VERSION : [ MATCH "#define BOOST_VERSION ([0-9]*)" : $(boost-shell[1]) ] ;
+  if $(BOOST-VERSION) < $(min-version) && $(CLEANING) = no {
+    exit You have Boost $(BOOST-VERSION).  This package requires Boost at least $(min-version) (and preferably newer). : 1 ;
   }
   # If matching version tags exist, use them.  
   boost-lib-version = [ MATCH "#define BOOST_LIB_VERSION \"([^\"]*)\"" : $(boost-shell[1]) ] ;
@@ -160,18 +187,23 @@ rule boost ( min-version ) {
   boost-lib program_options PROGRAM_OPTIONS_DYN_LINK ;
   boost-lib unit_test_framework TEST_DYN_LINK ;
   boost-lib iostreams IOSTREAMS_DYN_LINK ;
+  boost-lib filesystem FILE_SYSTEM_DYN_LINK ;
+#  if $(BOOST-VERSION) >= 104800 {
+#    boost-lib chrono CHRONO_DYN_LINK ;
+#    boost-lib timer TIMER_DYN_LINK : boost_chrono ;
+#  }
 }
  
 #Link normally to a library, but sometimes static isn't installed so fall back to dynamic.
-rule external-lib ( name : search-path * ) {
-  lib $(name) : : [ auto-shared $(name) : "-L"$(search-path) ] <search>$(search-path) ;
+rule external-lib ( name : search-path * : deps * ) {
+  lib $(name) : : [ auto-shared $(name) : "-L"$(search-path) ] <search>$(search-path) <use>$(deps) ;
 }
 
 #Write the current command line to previous.sh.  This does not do shell escaping.  
 {
   local build-log = $(TOP)/previous.sh ;
   if ! [ path.exists $(build-log) ] {
-    SHELL "touch $(build-log) && chmod +x $(build-log)" ;
+    SHELL "touch \"$(build-log)\" && chmod +x \"$(build-log)\"" ;
   }
   local script = [ modules.peek : ARGV ] ;
   if $(script[1]) = "./jam-files/bjam" {
@@ -243,6 +275,30 @@ build-system.set-post-build-hook $(__name__).post-build ;
 rule add-post-hook ( names * ) {
   post-hooks += $(names) ;
 }
+
+rule failure-message ( ok ? ) {
+  if $(ok) != "ok" {
+    local args = [ modules.peek : ARGV ] ;
+    local args = $(args:J=" ") ;
+    if --debug-configuration in [ modules.peek : ARGV ] {
+      echo "The build failed with command line: " ;
+      echo "  $(args)" ;
+      echo "If you need support, attach the full output to your e-mail." ;
+    } else {
+      echo "The build failed.  If you need support, run:" ;
+      echo "  $(args) --debug-configuration -d2 |gzip >build.log.gz" ;
+      echo "then attach build.log.gz to your e-mail." ;
+      echo "You MUST do 3 things before sending to the mailing list:" ;
+      echo "   1. Subscribe to the mailing list at http://mailman.mit.edu/mailman/listinfo/moses-support" ;
+      echo "   2. Attach build.log.gz to your e-mail" ;
+      echo "   3. Say what is the EXACT command you executed when you got the error" ;
+    }
+    echo "ERROR" ;
+  } else {
+    echo "SUCCESS" ;
+  }
+}
+add-post-hook failure-message ;
 
 import feature : feature ;
 feature options-to-write : : free ;

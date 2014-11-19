@@ -47,6 +47,11 @@ bin/remove_long_lines
 removes lines longer than 2000 characters. 
 
 ```
+bin/remove_invalid_utf8
+```
+removes lines with invalid UTF-8
+
+```
 bin/select_latin
 ```
 Removes lines that contain bad UTF8; contain control characters; have less than
