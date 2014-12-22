@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
   if (argc == 1) {
     limit = 2000;
   } else if (argc == 2) {
-    limit = boost::lexical_cast<std::size_t>(argv[2]);
+    limit = boost::lexical_cast<std::size_t>(argv[1]);
   } else {
     std::cerr << "Usage: " << argv[0] << " [length limit in bytes]" << std::endl;
     return 1;
