@@ -59,7 +59,7 @@ if $(FORCE-STATIC) {
 
 rule test_library ( name ) {
   if $(FORCE-STATIC) {
-    return [ test_flags "-Wl,-Bstatic -l$(name) -Wl,-Bdynamic" ] ;
+    return [ test_flags "-l$(name) -static" ] ;
   } else {
     return [ test_flags "-l$(name)" ] ;
   }
@@ -74,16 +74,7 @@ rule test_library ( name ) {
   constant CLEANING : $(cleaning) ;
 }
 
-shared-command-line = ;
-local argv = [ modules.peek : ARGV ] ;
-while $(argv) {
-  if $(argv[1]) = "link=shared" {
-    shared-command-line = <link>shared ;
-  }
-  argv = $(argv[2-]) ;
-}
-
-#Determine if a library can be compiled statically.  
+#Determine if a library can be compiled statically.
 rule auto-shared ( name : additional * ) {
   additional ?= "" ;
   if $(shared-command-line) = "<link>shared" {
@@ -132,7 +123,10 @@ if $(with-macports) {
  
 #Convenience rule for boost libraries.  Defines library boost_$(name).  
 rule boost-lib ( name macro : deps * ) {
-  flags = $(L-boost-search)" -lboost_"$(name)"$(boost-lib-version)" ;
+  #Link multi-threaded programs against the -mt version if available.  Old 
+  #versions of boost do not have -mt tagged versions of all libraries.   Sadly,
+  #boost.jam does not handle this correctly.  
+  flags = $(L-boost-search)" -lboost_"$(name)"-mt$(boost-lib-version)" ;
   local main ;
   if $(name) = "unit_test_framework" {
     main = "BOOST_AUTO_TEST_CASE(foo) {}" ;
@@ -141,20 +135,19 @@ rule boost-lib ( name macro : deps * ) {
   if $(boost-auto-shared) = "<link>shared" {
     flags += " -DBOOST_$(macro)" ;
   } else {
-    flags = " -Wl,-Bstatic $(flags) -Wl,-Bdynamic " ;
+    flags += " -static" ;
   }
   if [ test_flags $(flags) : $(main) ] {
-    lib inner_boost_$(name) : : <threading>single $(boost-search) <name>boost_$(name)$(boost-lib-version) : <link>static : <library>$(deps) ;
-    lib inner_boost_$(name) : : <threading>multi $(boost-search) <name>boost_$(name)$(boost-lib-version) : <link>static : <library>$(deps) ;
+    lib inner_boost_$(name) : : <threading>single $(boost-search) <name>boost_$(name)$(boost-lib-version) : : <library>$(deps) ;
+    lib inner_boost_$(name) : : <threading>multi $(boost-search) <name>boost_$(name)-mt$(boost-lib-version) : : <library>$(deps) ;
   } else {
     lib inner_boost_$(name) : : $(boost-search) <name>boost_$(name)$(boost-lib-version) : : <library>$(deps) ;
   }
 
   if $(boost-auto-shared) = "<link>shared" {
-    alias boost_$(name) : inner_boost_$(name) : <link>shared ;
-    requirements += <define>BOOST_$(macro) ;
+    alias boost_$(name) : inner_boost_$(name) : <link>shared : : <define>BOOST_$(macro) ;
   } else {
-    alias boost_$(name) : inner_boost_$(name) : <link>static ;
+    alias boost_$(name) : inner_boost_$(name) : : : <link>shared:<define>BOOST_$(macro) ;
   }
 }
 
@@ -181,7 +174,9 @@ rule boost ( min-version ) {
   #Are we linking static binaries against shared boost?
   boost-auto-shared = [ auto-shared "boost_program_options"$(boost-lib-version) : $(L-boost-search) ] ;
 
-  #See tools/build/v2/contrib/boost.jam in a boost distribution for a table of macros to define.   
+  #See tools/build/v2/contrib/boost.jam in a boost distribution for a table of macros to define.
+  #boost_exception is static only and may not be needed just yet.
+  #boost-lib exception EXCEPTION_DYN_LINK ;
   boost-lib system SYSTEM_DYN_LINK ;
   boost-lib thread THREAD_DYN_DLL : boost_system ;
   boost-lib program_options PROGRAM_OPTIONS_DYN_LINK ;
@@ -195,8 +190,8 @@ rule boost ( min-version ) {
 }
  
 #Link normally to a library, but sometimes static isn't installed so fall back to dynamic.
-rule external-lib ( name : search-path * : deps * ) {
-  lib $(name) : : [ auto-shared $(name) : "-L"$(search-path) ] <search>$(search-path) <use>$(deps) ;
+rule external-lib ( name : search-path * ) {
+  lib $(name) : : [ auto-shared $(name) : "-L"$(search-path) ] <search>$(search-path) ;
 }
 
 #Write the current command line to previous.sh.  This does not do shell escaping.  
@@ -252,7 +247,7 @@ rule install-bin-libs ( deps * ) {
   install prefix-lib : $(deps) : <location>$(LIBDIR) <install-dependencies>on <install-type>LIB <link>shared:<dll-path>$(LIBDIR) ;
 }
 rule install-headers ( name : list * : source-root ? ) {
-  local includedir = [ option.get "includedir" : $(prefix)/include ] ;
+  local includedir = [ option.get "includedir" : $(PREFIX)/include ] ;
   source-root ?= "." ;
   install $(name) : $(list) : <location>$(includedir) <install-source-root>$(source-root) ;
 }
@@ -275,30 +270,6 @@ build-system.set-post-build-hook $(__name__).post-build ;
 rule add-post-hook ( names * ) {
   post-hooks += $(names) ;
 }
-
-rule failure-message ( ok ? ) {
-  if $(ok) != "ok" {
-    local args = [ modules.peek : ARGV ] ;
-    local args = $(args:J=" ") ;
-    if --debug-configuration in [ modules.peek : ARGV ] {
-      echo "The build failed with command line: " ;
-      echo "  $(args)" ;
-      echo "If you need support, attach the full output to your e-mail." ;
-    } else {
-      echo "The build failed.  If you need support, run:" ;
-      echo "  $(args) --debug-configuration -d2 |gzip >build.log.gz" ;
-      echo "then attach build.log.gz to your e-mail." ;
-      echo "You MUST do 3 things before sending to the mailing list:" ;
-      echo "   1. Subscribe to the mailing list at http://mailman.mit.edu/mailman/listinfo/moses-support" ;
-      echo "   2. Attach build.log.gz to your e-mail" ;
-      echo "   3. Say what is the EXACT command you executed when you got the error" ;
-    }
-    echo "ERROR" ;
-  } else {
-    echo "SUCCESS" ;
-  }
-}
-add-post-hook failure-message ;
 
 import feature : feature ;
 feature options-to-write : : free ;
