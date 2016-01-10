@@ -3,6 +3,7 @@
 #include "util/murmur_hash.hh"
 #include "util/probing_hash_table.hh"
 #include "util/scoped.hh"
+#include "util/utf8.hh"
 
 #include <boost/lexical_cast.hpp>
 
@@ -64,7 +65,7 @@ int main(int argc, char *argv[]) {
       l = StripSpaces(l);
       // Remove lines beginning with Christian's magic token.
       if (starts_with(l, remove_line)) continue;
-      if (IsNewLine(table, l)) {
+      if (IsNewLine(table, l) && utf8::IsUTF8(l)) {
         out << l << '\n';
       }
     }
