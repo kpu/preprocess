@@ -10,6 +10,8 @@
 
 #include <stdint.h>
 
+namespace {
+
 struct Entry {
   typedef uint64_t Key;
   uint64_t key;
@@ -17,42 +19,56 @@ struct Entry {
   void SetKey(uint64_t to) { key = to; }
 };
 
-int main(int argc, char *argv[]) {
-  std::size_t estimate = (argc == 2) ? boost::lexical_cast<std::size_t>(argv[1]) : 100000000;
-  typedef util::ProbingHashTable<Entry, util::IdentityHash> Table;
-  StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
-  try {
-    util::scoped_malloc table_backing(util::CallocOrThrow(Table::Size(estimate, 1.5)));
-    Table table(table_backing.get(), Table::Size(estimate, 1.5));
-    std::size_t double_cutoff = estimate * 1.2;
-    util::FakeOFStream out(1);
-    util::FilePiece in(0, "stdin", NULL);
-    while (true) {
-      // Strip leading spaces
-      in.SkipSpaces();
-      StringPiece l = in.ReadLine();
+typedef util::AutoProbing<Entry, util::IdentityHash> Table;
 
+bool IsNewLine(Table &table, StringPiece l) {
+  Table::MutableIterator it;
+  Entry entry;
+  entry.key = util::MurmurHashNative(l.data(), l.size(), 1);
+  return !table.FindOrInsert(entry, it);
+}
+
+StringPiece StripSpaces(StringPiece ret) {
+  while (ret.size() && util::kSpaces[static_cast<unsigned char>(*ret.data())]) {
+    ret = StringPiece(ret.data() + 1, ret.size() - 1);
+  }
+  while (ret.size() && util::kSpaces[static_cast<unsigned char>(ret.data()[ret.size() - 1])]) {
+    ret = StringPiece(ret.data(), ret.size() - 1);
+  }
+  return ret;
+}
+
+
+} // namespace
+
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    std::cerr << "Usage: " << argv[0] << " file_to_remove\nLines in file_to_remove will be removed from the input.\n" << std::endl;
+    return 1;
+  }
+  try {
+    Table table;
+    StringPiece l;
+
+    {
+      util::FilePiece removing(argv[1]);
+      while (removing.ReadLineOrEOF(l)) {
+        IsNewLine(table, StripSpaces(l));
+      }
+    }
+
+    StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
+    util::FakeOFStream out(1);
+    util::FilePiece in(0, "stdin", &std::cerr);
+    while (in.ReadLineOrEOF(l)) {
+      l = StripSpaces(l);
       // Remove lines beginning with Christian's magic token.
       if (starts_with(l, remove_line)) continue;
-      // Strip trailing spaces
-      while (l.size() && util::kSpaces[static_cast<unsigned char>(l.data()[l.size() - 1])]) {
-        l = StringPiece(l.data(), l.size() - 1);
-      }
-
-      Entry entry;
-      Table::MutableIterator it;
-      entry.key = util::MurmurHashNative(l.data(), l.size(), 1);
-      if (!table.FindOrInsert(entry, it)) {
+      if (IsNewLine(table, l)) {
         out << l << '\n';
-        if (table.SizeNoSerialization() > double_cutoff) {
-          table_backing.call_realloc(table.DoubleTo());
-          table.Double(table_backing.get());
-          double_cutoff *= 2;
-        }
       }
     }
   } 
-  catch (const util::EndOfFileException &e) { return 0; }
   catch (const std::exception &e) {
     std::cerr << e.what() << std::endl;
     return 1;
