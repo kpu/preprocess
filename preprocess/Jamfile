@@ -4,7 +4,7 @@ external-lib icuio ;
 exe select_latin : select_latin.cc icui18n ../util//kenutil ;
 exe gigaword_unwrap : gigaword_unwrap.cc ../util//kenutil ;
 exe dedupe : dedupe_main.cc ../util//kenutil ;
-exe dedupe_custom : dedupe_custom_main.cc ../util//kenutil ;
+exe commoncrawl_dedupe : commoncrawl_dedupe_main.cc ../util//kenutil ;
 exe vocab : vocab_main.cc ../util//kenutil ;
 exe remove_long_lines : remove_long_lines_main.cc ../util//kenutil ;
 exe remove_invalid_utf8 : remove_invalid_utf8_main.cc ../util//kenutil ;
