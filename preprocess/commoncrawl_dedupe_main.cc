@@ -43,29 +43,28 @@ StringPiece StripSpaces(StringPiece ret) {
 } // namespace
 
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " file_to_remove\nLines in file_to_remove will be removed from the input.\n" << std::endl;
+  if (argc > 2 || !strcmp("-h", argv[1]) || !strcmp("--help", argv[1])) {
+    std::cerr << "Usage: " << argv[0] << " file_to_remove\nLines that appear in file_to_remove will be excluded from the output.\n" << std::endl;
     return 1;
   }
   try {
     Table table;
     StringPiece l;
 
-    {
+    if (argc == 2) {
       util::FilePiece removing(argv[1]);
       while (removing.ReadLineOrEOF(l)) {
         IsNewLine(table, StripSpaces(l));
       }
     }
 
-    StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
+    const StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
     util::FakeOFStream out(1);
     util::FilePiece in(0, "stdin", &std::cerr);
     while (in.ReadLineOrEOF(l)) {
       l = StripSpaces(l);
       // Remove lines beginning with Christian's magic token.
-      if (starts_with(l, remove_line)) continue;
-      if (IsNewLine(table, l) && utf8::IsUTF8(l)) {
+      if (!starts_with(l, remove_line) && IsNewLine(table, l) && utf8::IsUTF8(l)) {
         out << l << '\n';
       }
     }
