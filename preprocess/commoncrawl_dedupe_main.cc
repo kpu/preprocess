@@ -43,7 +43,7 @@ StringPiece StripSpaces(StringPiece ret) {
 } // namespace
 
 int main(int argc, char *argv[]) {
-  if (argc > 2 || !strcmp("-h", argv[1]) || !strcmp("--help", argv[1])) {
+  if (argc > 2 || (argc == 2 && (!strcmp("-h", argv[1]) || !strcmp("--help", argv[1])))) {
     std::cerr << "Usage: " << argv[0] << " file_to_remove\nLines that appear in file_to_remove will be excluded from the output.\n" << std::endl;
     return 1;
   }
