@@ -1,3 +1,9 @@
+// Tool to convert raw CommonCrawl files into deduplicated files.
+// Strips leading and trailing spaces.
+// Removes document delimiter lines (those that begin with df6fa1abb58549287111ba8d776733e9).
+// Removes duplicate lines.
+// Removes any line that contains invalid UTF-8.
+//
 #include "util/fake_ofstream.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
@@ -5,14 +11,13 @@
 #include "util/scoped.hh"
 #include "util/utf8.hh"
 
-#include <boost/lexical_cast.hpp>
-
 #include <iostream>
 
 #include <stdint.h>
 
 namespace {
 
+// Hash table with 64-bit keys.
 struct Entry {
   typedef uint64_t Key;
   uint64_t key;
@@ -22,6 +27,7 @@ struct Entry {
 
 typedef util::AutoProbing<Entry, util::IdentityHash> Table;
 
+// Use 64-bit MurmurHash in the hash table.  
 bool IsNewLine(Table &table, StringPiece l) {
   Table::MutableIterator it;
   Entry entry;
@@ -29,6 +35,7 @@ bool IsNewLine(Table &table, StringPiece l) {
   return !table.FindOrInsert(entry, it);
 }
 
+// Remove leading and trailing space characters.
 StringPiece StripSpaces(StringPiece ret) {
   while (ret.size() && util::kSpaces[static_cast<unsigned char>(*ret.data())]) {
     ret = StringPiece(ret.data() + 1, ret.size() - 1);
@@ -51,6 +58,7 @@ int main(int argc, char *argv[]) {
     Table table;
     StringPiece l;
 
+    // If there's a file to remove lines from, add it to the hash table of lines.
     if (argc == 2) {
       util::FilePiece removing(argv[1]);
       while (removing.ReadLineOrEOF(l)) {
@@ -58,12 +66,16 @@ int main(int argc, char *argv[]) {
       }
     }
 
+    // This is the beginning of a line that delimits documents in the raw files.
     const StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
     util::FakeOFStream out(1);
     util::FilePiece in(0, "stdin", &std::cerr);
     while (in.ReadLineOrEOF(l)) {
       l = StripSpaces(l);
-      // Remove lines beginning with Christian's magic token.
+      // A line passes if:
+      // It does not begin with the magic document delimiter.
+      // Its 64-bit hash has not been seen before.
+      // and it is valid UTF-8.
       if (!starts_with(l, remove_line) && IsNewLine(table, l) && utf8::IsUTF8(l)) {
         out << l << '\n';
       }
