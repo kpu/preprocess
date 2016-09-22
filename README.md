@@ -42,6 +42,11 @@ bin/dedupe
 deduplicates text at the line level.
 
 ```bash
+bin/shard prefix shard_count
+```
+Shards stdin into multiple files named prefix0 prefix1 prefix2 etc.  This is useful when the deduper above runs out of memory.
+
+```bash
 bin/remove_long_lines
 ```
 removes lines longer than 2000 characters. 
