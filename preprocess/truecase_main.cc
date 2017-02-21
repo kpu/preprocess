@@ -136,7 +136,8 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
 
 int main(int argc, char *argv[]) {
   if (argc != 3 || (strcmp(argv[1], "--model") && strcmp(argv[1], "-model"))) {
-    std::cerr << "truecase --model $model <in >out" << std::endl;
+    std::cerr << "Fast reimplementation of Moses scripts/recaser/truecase.perl except it does not support factors." << std::endl;
+    std::cerr << argv[0] << " --model $model <in >out" << std::endl;
     return 1;
   }
   Truecase caser(argv[2]);

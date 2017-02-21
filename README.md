@@ -42,14 +42,14 @@ bin/dedupe
 deduplicates text at the line level.
 
 ```bash
-bin/shard prefix shard_count
+bin/shard $prefix $shard_count
 ```
 Shards stdin into multiple files named prefix0 prefix1 prefix2 etc.  This is useful when the deduper above runs out of memory.
 
 ```bash
-bin/remove_long_lines
+bin/remove_long_lines $length_limit
 ```
-removes lines longer than 2000 characters. 
+removes lines longer than the specified length in bytes.  The default is 2000 bytes.
 
 ```bash
 bin/remove_invalid_utf8
@@ -83,10 +83,14 @@ bin/moses/tokenizer/tokenizer.perl -l $language
 The Moses tokenizer.
 
 ```bash
-xzcat $language.*.raw.xz |commoncrawl_dedupe /dev/null |xz >$language.xz
+bin/truecase --model $model
 ```
-Process the CommonCrawl n-grams raw files into the deduped files.  
+is a fast reimplementation of the Moses `truecase.perl` script.  It does not support factors.
 
+```bash
+xzcat $language.*.raw.xz |commoncrawl_dedupe /dev/null |xz >$language.deduped.xz
+```
+Process the CommonCrawl n-grams raw files into the deduped files:
 * Remove lines beginning with df6fa1abb58549287111ba8d776733e9 (these mark document boundaries)
 * Strip leading and trailing whitespace
 * Deduplicate, preserving the first instance of the line
