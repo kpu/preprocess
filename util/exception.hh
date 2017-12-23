@@ -1,11 +1,11 @@
-#ifndef UTIL_EXCEPTION__
-#define UTIL_EXCEPTION__
+#ifndef UTIL_EXCEPTION_H
+#define UTIL_EXCEPTION_H
+
+#include "util/string_stream.hh"
 
 #include <exception>
 #include <limits>
-#include <sstream>
 #include <string>
-
 #include <stdint.h>
 
 namespace util {
@@ -17,13 +17,9 @@ class Exception : public std::exception {
     Exception() throw();
     virtual ~Exception() throw();
 
-    Exception(const Exception &from);
-    Exception &operator=(const Exception &from);
+    const char *what() const throw() { return what_.str().c_str(); }
 
-    // Not threadsafe, but probably doesn't matter.  FWIW, Boost's exception guidance implies that what() isn't threadsafe.  
-    const char *what() const throw();
-
-    // For use by the UTIL_THROW macros.  
+    // For use by the UTIL_THROW macros.
     void SetLocation(
         const char *file,
         unsigned int line,
@@ -34,21 +30,20 @@ class Exception : public std::exception {
   private:
     template <class Except, class Data> friend typename Except::template ExceptionTag<Except&>::Identity operator<<(Except &e, const Data &data);
 
-    // This helps restrict operator<< defined below.  
+    // This helps restrict operator<< defined below.
     template <class T> struct ExceptionTag {
       typedef T Identity;
     };
 
-    std::stringstream stream_;
-    mutable std::string text_;
+    StringStream what_;
 };
 
-/* This implements the normal operator<< for Exception and all its children. 
+/* This implements the normal operator<< for Exception and all its children.
  * SFINAE means it only applies to Exception.  Think of this as an ersatz
- * boost::enable_if.  
+ * boost::enable_if.
  */
 template <class Except, class Data> typename Except::template ExceptionTag<Except&>::Identity operator<<(Except &e, const Data &data) {
-  e.stream_ << data;
+  e.what_ << data;
   return e;
 }
 
@@ -64,10 +59,10 @@ template <class Except, class Data> typename Except::template ExceptionTag<Excep
 
 /* Create an instance of Exception, add the message Modify, and throw it.
  * Modify is appended to the what() message and can contain << for ostream
- * operations.  
+ * operations.
  *
  * do .. while kludge to swallow trailing ; character
- * http://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html .  
+ * http://gcc.gnu.org/onlinedocs/cpp/Swallowing-the-Semicolon.html .
  * Arg can be a constructor argument to the exception.
  */
 #define UTIL_THROW_BACKEND(Condition, Exception, Arg, Modify) do { \
@@ -83,10 +78,19 @@ template <class Except, class Data> typename Except::template ExceptionTag<Excep
 #define UTIL_THROW(Exception, Modify) \
   UTIL_THROW_BACKEND(NULL, Exception, , Modify);
 
+#define UTIL_THROW2(Modify) \
+  UTIL_THROW_BACKEND(NULL, util::Exception, , Modify);
+
 #if __GNUC__ >= 3
 #define UTIL_UNLIKELY(x) __builtin_expect (!!(x), 0)
 #else
 #define UTIL_UNLIKELY(x) (x)
+#endif
+
+#if __GNUC__ >= 3
+#define UTIL_LIKELY(x) __builtin_expect (!!(x), 1)
+#else
+#define UTIL_LIKELY(x) (x)
 #endif
 
 #define UTIL_THROW_IF_ARG(Condition, Exception, Arg, Modify) do { \
@@ -121,7 +125,7 @@ class FileOpenException : public Exception {
     ~FileOpenException() throw() {}
 };
 
-// Utilities for overflow checking.  
+// Utilities for overflow checking.
 class OverflowException : public Exception {
   public:
     OverflowException() throw();
@@ -141,6 +145,15 @@ inline std::size_t CheckOverflow(uint64_t value) {
   return CheckOverflowInternal<sizeof(std::size_t)>(value);
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+/* Thrown for Windows specific operations. */
+class WindowsException : public Exception {
+  public:
+    WindowsException() throw();
+    ~WindowsException() throw();
+};
+#endif
+
 } // namespace util
 
-#endif // UTIL_EXCEPTION__
+#endif // UTIL_EXCEPTION_H

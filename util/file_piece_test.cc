@@ -1,6 +1,7 @@
 // Tests might fail if you have creative characters in your path.  Sue me.
 #include "util/file_piece.hh"
 
+#include "util/file_stream.hh"
 #include "util/file.hh"
 #include "util/scoped.hh"
 
@@ -8,8 +9,7 @@
 #include <boost/test/unit_test.hpp>
 #include <fstream>
 #include <iostream>
-
-#include <stdio.h>
+#include <cstdio>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -42,6 +42,24 @@ BOOST_AUTO_TEST_CASE(IStream) {
 BOOST_AUTO_TEST_CASE(MMapReadLine) {
   std::fstream ref(FileLocation().c_str(), std::ios::in);
   FilePiece test(FileLocation().c_str(), NULL, 1);
+  std::string ref_line;
+  while (getline(ref, ref_line)) {
+    StringPiece test_line(test.ReadLine());
+    // I submitted a bug report to ICU: http://bugs.icu-project.org/trac/ticket/7924
+    if (!test_line.empty() || !ref_line.empty()) {
+      BOOST_CHECK_EQUAL(ref_line, test_line);
+    }
+  }
+  BOOST_CHECK_THROW(test.get(), EndOfFileException);
+}
+
+/* mmap with seek beforehand */
+BOOST_AUTO_TEST_CASE(MMapSeek) {
+  std::fstream ref(FileLocation().c_str(), std::ios::in);
+  ref.seekg(10);
+  scoped_fd file(util::OpenReadOrThrow(FileLocation().c_str()));
+  SeekOrThrow(file.get(), 10);
+  FilePiece test(file.release());
   std::string ref_line;
   while (getline(ref, ref_line)) {
     StringPiece test_line(test.ReadLine());
@@ -133,6 +151,22 @@ BOOST_AUTO_TEST_CASE(StreamZipReadLine) {
 #endif // __APPLE__
 
 #endif // HAVE_ZLIB
+
+BOOST_AUTO_TEST_CASE(Numbers) {
+  scoped_fd file(MakeTemp(FileLocation()));
+  const float floating = 3.2;
+  {
+    util::FileStream writing(file.get());
+    writing << "94389483984398493890287 " << floating << " 5";
+  }
+  SeekOrThrow(file.get(), 0);
+  util::FilePiece f(file.release());
+  BOOST_CHECK_THROW(f.ReadULong(), ParseNumberException);
+  BOOST_CHECK_EQUAL("94389483984398493890287", f.ReadDelimited());
+  // Yes, exactly equal.  Isn't double-conversion wonderful?
+  BOOST_CHECK_EQUAL(floating, f.ReadFloat());
+  BOOST_CHECK_EQUAL(5, f.ReadULong());
+}
 
 } // namespace
 } // namespace util

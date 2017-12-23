@@ -1,9 +1,17 @@
 preprocess
 ==========
 
-Pipelines for preprocessing corpora.  
+Pipelines for preprocessing corpora.
 
-Compile with bjam.
+Compile with cmake:
+```bash
+mkdir build
+cd build
+cmake ..
+make -j4
+```
+
+TODO: update paths for cmake
 
 ```bash
 bin/text.sh $language $lower
@@ -23,12 +31,12 @@ lines.
 bin/moses/ems/support/split-sentences.perl -l $language
 ```
 is the Moses/Europarl sentence splitter with a bugfix to also split sentences
-separated by two spaces. 
+separated by two spaces.
 
 ```bash
 bin/resplit.sh $language
 ```
-preserves existing line breaks and introduces additional breaks when multiple sentences appear in the same line.  This is useful when you want to use the target side of parallel corpora for language modeling.  
+preserves existing line breaks and introduces additional breaks when multiple sentences appear in the same line.  This is useful when you want to use the target side of parallel corpora for language modeling.
 
 
 ```bash
@@ -61,7 +69,7 @@ bin/select_latin
 ```
 Removes lines that contain bad UTF8; contain control characters; have less than
 90% Latin, Common, or Inherited characters (except angle brackets); or have less
-than 50% Latin characters.  I used this for giga-fren.  
+than 50% Latin characters.  I used this for giga-fren.
 
 ```bash
 bin/process_unicode -l $language [--flatten] [--normalize] [--lower]

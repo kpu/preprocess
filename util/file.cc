@@ -5,28 +5,29 @@
 
 #include "util/exception.hh"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
-#include <sstream>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <sstream>
 
-#include <assert.h>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
+#include <climits>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdint.h>
 
-#if defined __MINGW32__
+#if defined(__MINGW32__)
 #include <windows.h>
 #include <unistd.h>
 #warning "The file functions on MinGW have not been tested for file sizes above 2^31 - 1.  Please read https://stackoverflow.com/questions/12539488/determine-64-bit-file-size-in-c-on-mingw-32-bit and fix"
 #elif defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #include <io.h>
-#include <algorithm>
-#include <limits.h>
-#include <limits>
 #else
 #include <unistd.h>
 #endif
@@ -40,9 +41,9 @@ scoped_fd::~scoped_fd() {
   }
 }
 
-scoped_FILE::~scoped_FILE() {
-  if (file_ && std::fclose(file_)) {
-    std::cerr << "Could not close file " << std::endl;
+void scoped_FILE_closer::Close(std::FILE *file) {
+  if (file && std::fclose(file)) {
+    std::cerr << "Could not close file " << file << std::endl;
     std::abort();
   }
 }
@@ -58,6 +59,14 @@ EndOfFileException::EndOfFileException() throw() {
   *this << "End of file";
 }
 EndOfFileException::~EndOfFileException() throw() {}
+
+bool InputFileIsStdin(StringPiece path) {
+  return path == "-" || path == "/dev/stdin";
+}
+
+bool OutputFileIsStdout(StringPiece path) {
+  return path == "-" || path == "/dev/stdout";
+}
 
 int OpenReadOrThrow(const char *name) {
   int ret;
@@ -124,6 +133,14 @@ void ResizeOrThrow(int fd, uint64_t to) {
   UTIL_THROW_IF_ARG(ret, FDException, (fd), "while resizing to " << to << " bytes");
 }
 
+void HolePunch(int fd, uint64_t offset, uint64_t size) {
+#if defined(__linux__) && defined(FALLOC_FL_PUNCH_HOLE) && defined(FALLOC_FL_KEEP_SIZE)
+  UTIL_THROW_IF_ARG(-1 == fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, size), FDException, (fd), "in punching a hole at " << offset << " for " << size << " bytes.");
+#else
+  UTIL_THROW(UnsupportedOSException, "fallocate hole punching requires Linux and glibc >= 2.18");
+#endif
+}
+
 namespace {
 std::size_t GuardLarge(std::size_t size) {
   // The following operating systems have broken read/write/pread/pwrite that
@@ -138,17 +155,33 @@ std::size_t GuardLarge(std::size_t size) {
 }
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+namespace {
+const std::size_t kMaxDWORD = static_cast<std::size_t>(4294967295UL);
+} // namespace
+#endif
+
 std::size_t PartialRead(int fd, void *to, std::size_t amount) {
 #if defined(_WIN32) || defined(_WIN64)
-  int ret = _read(fd, to, GuardLarge(amount));
+    DWORD ret;
+    HANDLE file_handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    DWORD larger_size = static_cast<DWORD>(std::min<std::size_t>(kMaxDWORD, amount));
+    DWORD smaller_size = 28672; // Received reports that 31346 worked but higher values did not. This rounds down to the nearest multiple of 4096, the page size.
+    if (!ReadFile(file_handle, to, larger_size, &ret, NULL))
+    {
+        DWORD last_error = GetLastError();
+        if (last_error != ERROR_NOT_ENOUGH_MEMORY || !ReadFile(file_handle, to, smaller_size, &ret, NULL)) {
+            UTIL_THROW(WindowsException, "Windows error in ReadFile.");
+        }
+    }
 #else
   errno = 0;
   ssize_t ret;
   do {
     ret = read(fd, to, GuardLarge(amount));
   } while (ret == -1 && errno == EINTR);
-#endif
   UTIL_THROW_IF_ARG(ret < 0, FDException, (fd), "while reading " << amount << " bytes");
+#endif
   return static_cast<std::size_t>(ret);
 }
 
@@ -172,45 +205,6 @@ std::size_t ReadOrEOF(int fd, void *to_void, std::size_t amount) {
     to += ret;
   }
   return amount;
-}
-
-void PReadOrThrow(int fd, void *to_void, std::size_t size, uint64_t off) {
-  uint8_t *to = static_cast<uint8_t*>(to_void);
-#if defined(_WIN32) || defined(_WIN64)
-  UTIL_THROW(Exception, "This pread implementation for windows is broken.  Please send me a patch that does not change the file pointer.  Atomically.  Or send me an implementation of pwrite that is allowed to change the file pointer but can be called concurrently with pread.");
-  const std::size_t kMaxDWORD = static_cast<std::size_t>(4294967295UL);
-#endif
-  for (;size ;) {
-#if defined(_WIN32) || defined(_WIN64)
-    /* BROKEN: changes file pointer.  Even if you save it and change it back, it won't be safe to use concurrently with write() or read() which lmplz does. */
-    // size_t might be 64-bit.  DWORD is always 32.
-    DWORD reading = static_cast<DWORD>(std::min<std::size_t>(kMaxDWORD, size));
-    DWORD ret;
-    OVERLAPPED overlapped;
-    memset(&overlapped, 0, sizeof(OVERLAPPED));
-    overlapped.Offset = static_cast<DWORD>(off);
-    overlapped.OffsetHigh = static_cast<DWORD>(off >> 32);
-    UTIL_THROW_IF(!ReadFile((HANDLE)_get_osfhandle(fd), to, reading, &ret, &overlapped), Exception, "ReadFile failed for offset " << off);
-#else
-    ssize_t ret;
-    errno = 0;
-    ret =
-#ifdef OS_ANDROID
-      pread64
-#else
-      pread
-#endif
-      (fd, to, GuardLarge(size), off);
-    if (ret <= 0) {
-      if (ret == -1 && errno == EINTR) continue;
-      UTIL_THROW_IF(ret == 0, EndOfFileException, " for reading " << size << " bytes at " << off << " from " << NameFromFD(fd));
-      UTIL_THROW_ARG(FDException, (fd), "while reading " << size << " bytes at offset " << off);
-    }
-#endif
-    size -= ret;
-    off += ret;
-    to += ret;
-  }
 }
 
 void WriteOrThrow(int fd, const void *data_void, std::size_t size) {
@@ -242,6 +236,77 @@ void WriteOrThrow(FILE *to, const void *data, std::size_t size) {
   UTIL_THROW_IF(1 != std::fwrite(data, size, 1, to), ErrnoException, "Short write; requested size " << size);
 }
 
+void ErsatzPRead(int fd, void *to_void, std::size_t size, uint64_t off) {
+  uint8_t *to = static_cast<uint8_t*>(to_void);
+  while (size) {
+#if defined(_WIN32) || defined(_WIN64)
+    /* BROKEN: changes file pointer.  Even if you save it and change it back, it won't be safe to use concurrently with write() or read() which lmplz does. */
+    // size_t might be 64-bit.  DWORD is always 32.
+    DWORD reading = static_cast<DWORD>(std::min<std::size_t>(kMaxDWORD, size));
+    DWORD ret;
+    OVERLAPPED overlapped;
+    memset(&overlapped, 0, sizeof(OVERLAPPED));
+    overlapped.Offset = static_cast<DWORD>(off);
+    overlapped.OffsetHigh = static_cast<DWORD>(off >> 32);
+    UTIL_THROW_IF(!ReadFile((HANDLE)_get_osfhandle(fd), to, reading, &ret, &overlapped), WindowsException, "ReadFile failed for offset " << off);
+#else
+    ssize_t ret;
+    errno = 0;
+    ret =
+#ifdef OS_ANDROID
+      pread64
+#else
+      pread
+#endif
+      (fd, to, GuardLarge(size), off);
+    if (ret <= 0) {
+      if (ret == -1 && errno == EINTR) continue;
+      UTIL_THROW_IF(ret == 0, EndOfFileException, " for reading " << size << " bytes at " << off << " from " << NameFromFD(fd));
+      UTIL_THROW_ARG(FDException, (fd), "while reading " << size << " bytes at offset " << off);
+    }
+#endif
+    size -= ret;
+    off += ret;
+    to += ret;
+  }
+}
+
+void ErsatzPWrite(int fd, const void *from_void, std::size_t size, uint64_t off) {
+  const uint8_t *from = static_cast<const uint8_t*>(from_void);
+  while(size) {
+#if defined(_WIN32) || defined(_WIN64)
+    /* Changes file pointer.  Even if you save it and change it back, it won't be safe to use concurrently with write() or read() */
+    // size_t might be 64-bit.  DWORD is always 32.
+    DWORD writing = static_cast<DWORD>(std::min<std::size_t>(kMaxDWORD, size));
+    DWORD ret;
+    OVERLAPPED overlapped;
+    memset(&overlapped, 0, sizeof(OVERLAPPED));
+    overlapped.Offset = static_cast<DWORD>(off);
+    overlapped.OffsetHigh = static_cast<DWORD>(off >> 32);
+    UTIL_THROW_IF(!WriteFile((HANDLE)_get_osfhandle(fd), from, writing, &ret, &overlapped), Exception, "WriteFile failed for offset " << off);
+#else
+    ssize_t ret;
+    errno = 0;
+    ret =
+#ifdef OS_ANDROID
+      pwrite64
+#else
+      pwrite
+#endif
+      (fd, from, GuardLarge(size), off);
+    if (ret <= 0) {
+      if (ret == -1 && errno == EINTR) continue;
+      UTIL_THROW_IF(ret == 0, EndOfFileException, " for writing " << size << " bytes at " << off << " from " << NameFromFD(fd));
+      UTIL_THROW_ARG(FDException, (fd), "while writing " << size << " bytes at offset " << off);
+    }
+#endif
+    size -= ret;
+    off += ret;
+    from += ret;
+  }
+}
+
+
 void FSyncOrThrow(int fd) {
 // Apparently windows doesn't have fsync?
 #if !defined(_WIN32) && !defined(_WIN64)
@@ -263,32 +328,36 @@ typedef CheckOffT<sizeof(off_t)>::True IgnoredType;
 #endif
 
 // Can't we all just get along?
-void InternalSeek(int fd, int64_t off, int whence) {
-  if (
+uint64_t InternalSeek(int fd, int64_t off, int whence) {
 #if defined __MINGW32__
-    // Does this handle 64-bit?
-    (off_t)-1 == lseek(fd, off, whence)
+  // Does this handle 64-bit?
+  typedef off_t Offset;
+  Offset ret = lseek(fd, off, whence);
 #elif defined(_WIN32) || defined(_WIN64)
-    (__int64)-1 == _lseeki64(fd, off, whence)
+  typedef __int64 Offset;
+  Offset ret = _lseeki64(fd, off, whence);
 #elif defined(OS_ANDROID)
-    (off64_t)-1 == lseek64(fd, off, whence)
+  typedef off64_t Offset;
+  Offset ret = lseek64(fd, off, whence);
 #else
-    (off_t)-1 == lseek(fd, off, whence)
+  typedef off_t Offset;
+  Offset ret = lseek(fd, off, whence);
 #endif
-  ) UTIL_THROW_ARG(FDException, (fd), "while seeking to " << off << " whence " << whence);
+  UTIL_THROW_IF_ARG((Offset)-1 == ret, FDException, (fd), "while seeking to " << off << " whence " << whence);
+  return (uint64_t)ret;
 }
 } // namespace
 
-void SeekOrThrow(int fd, uint64_t off) {
-  InternalSeek(fd, off, SEEK_SET);
+uint64_t SeekOrThrow(int fd, uint64_t off) {
+  return InternalSeek(fd, off, SEEK_SET);
 }
 
-void AdvanceOrThrow(int fd, int64_t off) {
-  InternalSeek(fd, off, SEEK_CUR);
+uint64_t AdvanceOrThrow(int fd, int64_t off) {
+  return InternalSeek(fd, off, SEEK_CUR);
 }
 
-void SeekEnd(int fd) {
-  InternalSeek(fd, 0, SEEK_END);
+uint64_t SeekEnd(int fd) {
+  return InternalSeek(fd, 0, SEEK_END);
 }
 
 std::FILE *FDOpenOrThrow(scoped_fd &file) {
@@ -421,7 +490,7 @@ int
 mkstemp_and_unlink(char *tmpl) {
   int ret = mkstemp(tmpl);
   if (ret != -1) {
-    UTIL_THROW_IF(unlink(tmpl), ErrnoException, "while deleting delete " << tmpl);
+    UTIL_THROW_IF(unlink(tmpl), ErrnoException, "while deleting " << tmpl);
   }
   return ret;
 }
@@ -458,6 +527,41 @@ std::FILE *FMakeTemp(const StringPiece &base) {
   return FDOpenOrThrow(file);
 }
 
+std::string DefaultTempDirectory() {
+#if defined(_WIN32) || defined(_WIN64)
+  char dir_buffer[1000];
+  if (GetTempPath(1000, dir_buffer) == 0)
+    throw std::runtime_error("Could not read temporary directory.");
+  std::string ret(dir_buffer);
+  NormalizeTempPrefix(ret);
+  return ret;
+#else
+  // POSIX says to try these environment variables, in this order:
+  const char *const vars[] = {"TMPDIR", "TMP", "TEMPDIR", "TEMP", 0};
+  for (int i=0; vars[i]; ++i) {
+    char *val =
+#if defined(_GNU_SOURCE)
+#if __GLIBC_PREREQ(2,17)
+      secure_getenv
+#else // __GLIBC_PREREQ
+      getenv
+#endif // __GLIBC_PREREQ
+#else // _GNU_SOURCE
+      getenv
+#endif
+      (vars[i]);
+    // Environment variable is set and nonempty.  Use it.
+    if (val && *val) {
+      std::string ret(val);
+      NormalizeTempPrefix(ret);
+      return ret;
+    }
+  }
+  // No environment variables set.  Default to /tmp.
+  return "/tmp/";
+#endif
+}
+
 int DupOrThrow(int fd) {
   int ret = dup(fd);
   UTIL_THROW_IF_ARG(ret == -1, FDException, (fd), "in duplicating the file descriptor");
@@ -484,7 +588,7 @@ bool TryName(int fd, std::string &out) {
     ssize_t ret = readlink(name.c_str(), &out[0], out.size());
     if (-1 == ret)
       return false;
-    if (ret < out.size()) {
+    if ((size_t)ret < out.size()) {
       out.resize(ret);
       break;
     }
