@@ -6,4 +6,4 @@ if [ ${#1} != 2 ]; then
   echo "Expected language on the command line." 1>&2
   exit 1
 fi
-$BINDIR/gigaword_unwrap | $BINDIR/moses/ems/support/split-sentences.perl -l $1 |fgrep -v "<P>"
+$BINDIR/gigaword_unwrap | $BINDIR/../moses/ems/support/split-sentences.perl -l $1 |fgrep -v "<P>"

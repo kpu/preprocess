@@ -18,7 +18,11 @@ set(EXE_LIST
   vocab
 )
 
-set(PREPROCESS_LIBS kenlm_util ${Boost_LIBRARIES} ${THREADS})
+set(PREPROCESS_LIBS preprocess_util ${Boost_LIBRARIES} ${THREADS})
 
 AddExes(EXES ${EXE_LIST}
   LIBRARIES ${PREPROCESS_LIBS})
+
+foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
+  configure_file(${script} ../bin/${script} COPYONLY)
+endforeach()

@@ -79,4 +79,5 @@ include_directories(
 # Process subdirectories
 add_subdirectory(util)
 add_subdirectory(preprocess)
+add_subdirectory(moses)
 

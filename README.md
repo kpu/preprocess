@@ -11,7 +11,7 @@ cmake ..
 make -j4
 ```
 
-TODO: update paths for cmake
+Paths are relative to the build directory.
 
 ```bash
 bin/text.sh $language $lower
@@ -28,7 +28,7 @@ ad-hoc parenthesized expressions like (UNDERLINE) and consecutive duplicate
 lines.
 
 ```bash
-bin/moses/ems/support/split-sentences.perl -l $language
+moses/ems/support/split-sentences.perl -l $language
 ```
 is the Moses/Europarl sentence splitter with a bugfix to also split sentences
 separated by two spaces.
@@ -86,7 +86,7 @@ bin/heuristics.perl -l $language
 A collection of substitution heuristics from various people.
 
 ```bash
-bin/moses/tokenizer/tokenizer.perl -l $language
+moses/tokenizer/tokenizer.perl -l $language
 ```
 The Moses tokenizer.
 
