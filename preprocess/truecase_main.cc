@@ -16,7 +16,7 @@ uint64_t Hash(const StringPiece &str) {
 
 const std::size_t kStringSize = 6374807;
 const std::size_t kHashEntries = 1085145;
-const std::size_t kHashSize = 39065208;
+const std::size_t kHashSize = 19098544;
 const std::size_t kModelSize = kStringSize + kHashSize;
 
 class ModelFile {
@@ -60,7 +60,7 @@ class Truecase {
       void SetKey(uint64_t to) { key = to; }
       
       // Offset of best from base string pointer.
-      uint64_t best;
+      uint32_t best;
       // If only the uppercase version is known, the lowercase version will still be in the hash table.
       bool known;
       bool sentence_end;
