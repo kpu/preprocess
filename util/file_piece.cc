@@ -1,5 +1,6 @@
 #include "util/file_piece.hh"
 
+#include "util/double-conversion/double-conversion.h"
 #include "util/exception.hh"
 #include "util/file.hh"
 #include "util/mmap.hh"
@@ -30,6 +31,10 @@
 namespace util {
 
 namespace { const uint64_t kPageSize = SizePage(); }
+
+ParseNumberException::ParseNumberException(StringPiece value) throw() {
+  *this << "Could not parse \"" << value << "\" into a ";
+}
 
 LineIterator &LineIterator::operator++() {
   if (!backing_->ReadLineOrEOF(line_, delim_))
@@ -100,6 +105,19 @@ bool FilePiece::ReadLineOrEOF(StringPiece &to, char delim, bool strip_cr) {
   return true;
 }
 
+float FilePiece::ReadFloat() {
+  return ReadNumber<float>();
+}
+double FilePiece::ReadDouble() {
+  return ReadNumber<double>();
+}
+long int FilePiece::ReadLong() {
+  return ReadNumber<long int>();
+}
+unsigned long int FilePiece::ReadULong() {
+  return ReadNumber<unsigned long int>();
+}
+
 // Factored out so that istream can call this.
 void FilePiece::InitializeNoRead(const char *name, std::size_t min_buffer) {
   file_name_ = name;
@@ -144,12 +162,12 @@ void FilePiece::Initialize(const char *name, std::ostream *show_progress, std::s
 
 namespace {
 
-/*static const double_conversion::StringToDoubleConverter kConverter(
+static const double_conversion::StringToDoubleConverter kConverter(
     double_conversion::StringToDoubleConverter::ALLOW_TRAILING_JUNK | double_conversion::StringToDoubleConverter::ALLOW_LEADING_SPACES,
     std::numeric_limits<double>::quiet_NaN(),
     std::numeric_limits<double>::quiet_NaN(),
     "inf",
-    "NaN");*/
+    "NaN");
 
 StringPiece FirstToken(StringPiece str) {
   const char *i;
@@ -168,7 +186,53 @@ template <class T> inline int CrossPlatformIsNaN(T value) {
 #endif
 }
 
+const char *ParseNumber(StringPiece str, float &out) {
+  int count;
+  out = kConverter.StringToFloat(str.data(), str.size(), &count);
+  UTIL_THROW_IF_ARG(CrossPlatformIsNaN(out) && str != "NaN" && str != "nan", ParseNumberException, (FirstToken(str)), "float");
+  return str.data() + count;
+}
+const char *ParseNumber(StringPiece str, double &out) {
+  int count;
+  out = kConverter.StringToDouble(str.data(), str.size(), &count);
+  UTIL_THROW_IF_ARG(CrossPlatformIsNaN(out) && str != "NaN" && str != "nan", ParseNumberException, (FirstToken(str)), "double");
+  return str.data() + count;
+}
+const char *ParseNumber(StringPiece str, long int &out) {
+  char *end;
+  errno = 0;
+  out = strtol(str.data(), &end, 10);
+  UTIL_THROW_IF_ARG(errno || (end == str.data()), ParseNumberException, (FirstToken(str)), "long int");
+  return end;
+}
+const char *ParseNumber(StringPiece str, unsigned long int &out) {
+  char *end;
+  errno = 0;
+  out = strtoul(str.data(), &end, 10);
+  UTIL_THROW_IF_ARG(errno || (end == str.data()), ParseNumberException, (FirstToken(str)), "unsigned long int");
+  return end;
+}
 } // namespace
+
+template <class T> T FilePiece::ReadNumber() {
+  SkipSpaces();
+  while (last_space_ < position_) {
+    if (UTIL_UNLIKELY(at_end_)) {
+      // Hallucinate a null off the end of the file.
+      std::string buffer(position_, position_end_);
+      T ret;
+      // Has to be null-terminated.
+      const char *begin = buffer.c_str();
+      const char *end = ParseNumber(StringPiece(begin, buffer.size()), ret);
+      position_ += end - begin;
+      return ret;
+    }
+    Shift();
+  }
+  T ret;
+  position_ = ParseNumber(StringPiece(position_, last_space_ - position_), ret);
+  return ret;
+}
 
 const char *FilePiece::FindDelimiterOrEOF(const bool *delim)  {
   std::size_t skip = 0;

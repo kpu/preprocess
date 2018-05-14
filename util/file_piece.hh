@@ -146,6 +146,11 @@ class FilePiece {
      */
     bool ReadLineOrEOF(StringPiece &to, char delim = '\n', bool strip_cr = true);
 
+    float ReadFloat();
+    double ReadDouble();
+    long int ReadLong();
+    unsigned long int ReadULong();
+
     // Skip spaces defined by isspace.
     void SkipSpaces(const bool *delim = kSpaces) {
       assert(position_ <= position_end_);
