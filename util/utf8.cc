@@ -8,11 +8,9 @@
 #include <unicode/utf8.h>
 #include <unicode/utypes.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <vector>
-
-#include <err.h>
 
 namespace utf8 {
 
@@ -39,7 +37,7 @@ class CaseMapWrap {
       case_map_ = ucasemap_open(NULL, 0, &err_csm);
       if (U_FAILURE(err_csm)) {
         std::cerr << "Failed to initialize case map." << std::endl;
-        abort();
+        std::abort();
       }
     }
 
