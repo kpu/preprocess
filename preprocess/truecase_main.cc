@@ -140,7 +140,6 @@ int main(int argc, char *argv[]) {
     std::cerr << argv[0] << " --model $model <in >out" << std::endl;
     return 1;
   }
-  utf8::Init();
   Truecase caser(argv[2]);
   util::FakeOFStream out(1);
   StringPiece line;
