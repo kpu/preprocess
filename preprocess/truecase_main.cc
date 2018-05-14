@@ -8,13 +8,46 @@
 
 #include <string.h>
 
+#include <iostream>
+
 uint64_t Hash(const StringPiece &str) {
-  return util::MurmurHashNative(str.data(), str.size());
+  return util::MurmurHash64A(str.data(), str.size());
 }
+
+const std::size_t kStringSize = 6374807;
+const std::size_t kHashEntries = 1085145;
+const std::size_t kHashSize = 39065208;
+const std::size_t kModelSize = kStringSize + kHashSize;
+
+class ModelFile {
+  public:
+    explicit ModelFile(const char *name) : file_(util::OpenReadOrThrow(name)) {
+      MapRead(util::POPULATE_OR_READ, file_.get(), 0, kModelSize, mem_);
+    }
+
+    const char *Base() const {
+      return mem_.begin();
+    }
+    char *Base() {
+      return mem_.begin();
+    }
+
+    void *HashTable() {
+      return mem_.begin() + kStringSize;
+    }
+
+  private:
+    util::scoped_fd file_;
+    util::scoped_memory mem_;
+
+    char *at_;
+};
 
 class Truecase {
   public:
     explicit Truecase(const char *file);
+
+    ~Truecase() {}
 
     // Apply truecasing, using temp as a buffer (to remain const and fast).
     void Apply(const StringPiece &line, std::string &temp, util::FakeOFStream &out) const;
@@ -26,75 +59,22 @@ class Truecase {
       uint64_t GetKey() const { return key; }
       void SetKey(uint64_t to) { key = to; }
       
-      const char *best;
+      // Offset of best from base string pointer.
+      uint64_t best;
       // If only the uppercase version is known, the lowercase version will still be in the hash table.
       bool known;
       bool sentence_end;
       bool delayed_sentence_start;
     };
 
-    TableEntry &Insert(StringPiece word) {
-      TableEntry entry;
-      entry.key = Hash(word);
-      entry.sentence_end = false;
-      entry.delayed_sentence_start = false;
-      entry.known = true;
-      Table::MutableIterator it;
-      if (!table_.FindOrInsert(entry, it)) {
-        char *start = static_cast<char*>(memcpy(string_pool_.Allocate(word.size() + 1), word.data(), word.size()));
-        start[word.size()] = '\0';
-        it->best = start;
-      } else {
-        it->known = true;
-      }
-      return *it;
-    }
+    ModelFile model_;
 
-    void InsertFollow(StringPiece word, const char *best, bool known) {
-      TableEntry entry;
-      entry.key = Hash(word);
-      entry.sentence_end = false;
-      entry.delayed_sentence_start = false;
-      entry.best = best;
-      entry.known = known;
-      Table::MutableIterator it;
-      table_.FindOrInsert(entry, it);
-      it->known |= known;
-    }
-
-    util::Pool string_pool_;
-
-    typedef util::AutoProbing<TableEntry, util::IdentityHash> Table;
+    typedef util::ProbingHashTable<TableEntry, util::IdentityHash> Table;
 
     Table table_;
 };
 
-Truecase::Truecase(const char *file) {
-  // Sentence ends.
-  const char *kEndSentence[] = { ".", ":", "?", "!"};
-  for (const char *const *i = kEndSentence; i != kEndSentence + sizeof(kEndSentence) / sizeof(const char*); ++i)
-    Insert(*i).sentence_end = true;
-
-  // Delays sentence start.
-  const char *kDelayedSentenceStart[] = {"(", "[", "\"", "'", "&apos;", "&quot;", "&#91;", "&#93;"};
-  for (const char *const *i = kDelayedSentenceStart; i != kDelayedSentenceStart + sizeof(kDelayedSentenceStart) / sizeof(const char*); ++i)
-    Insert(*i).delayed_sentence_start = true;
-
-  StringPiece word;
-  std::string lower;
-  for (util::FilePiece f(file); f.ReadWordSameLine(word); f.ReadLine()) {
-    const TableEntry &top = Insert(word);
-    utf8::ToLower(word, lower);
-    if (word != lower) {
-      InsertFollow(lower, top.best, false);
-    }
-    // Discard every other token (these are statistics)
-    while (f.ReadWordSameLine(word) && f.ReadWordSameLine(word)) {
-      // These secondary casings reference the same best casing.
-      InsertFollow(word, top.best, true);
-    }
-  }
-}
+Truecase::Truecase(const char *file) : model_(file), table_(model_.HashTable(), kHashSize) {}
 
 void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStream &out) const {
   bool sentence_start = true;
@@ -114,7 +94,7 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStr
       const TableEntry *lower;
       if (table_.Find(Hash(temp), lower)) {
         // If there's a best form, print it.
-        out << lower->best;
+        out << model_.Base() + lower->best;
       } else {
         // Pass unknowns through.
         out << *word;
