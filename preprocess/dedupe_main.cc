@@ -3,8 +3,6 @@
 #include "util/probing_hash_table.hh"
 #include "util/scoped.hh"
 
-#include <boost/lexical_cast.hpp>
-
 #include <iostream>
 
 #include <stdint.h>
