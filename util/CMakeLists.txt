@@ -70,21 +70,3 @@ find_package(ICU REQUIRED COMPONENTS i18n uc data io)
 # Group these objects together for later use.
 add_library(preprocess_util ${PREPROCESS_UTIL_DOUBLECONVERSION_SOURCE} ${PREPROCESS_UTIL_STREAM_SOURCE} ${PREPROCESS_UTIL_SOURCE})
 target_link_libraries(preprocess_util ${Boost_LIBRARIES} ${READ_COMPRESSED_LIBS} ${ICU_LIBRARIES} ${THREADS} ${TIMER_LINK})
-
-# Only compile and run unit tests if tests should be run
-if(BUILD_TESTING)
-  set(PREPROCESS_BOOST_TESTS_LIST
-    integer_to_string_test
-    probing_hash_table_test
-    read_compressed_test
-    tokenize_piece_test
-  )
-
-  AddTests(TESTS ${PREPROCESS_BOOST_TESTS_LIST}
-           LIBRARIES preprocess_util ${Boost_LIBRARIES} ${THREADS})
-
-  # file_piece_test requires an extra command line parameter
-  KenLMAddTest(TEST file_piece_test
-               LIBRARIES preprocess_util ${Boost_LIBRARIES} ${THREADS}
-               TEST_ARGS ${CMAKE_CURRENT_SOURCE_DIR}/file_piece.cc)
-endif()

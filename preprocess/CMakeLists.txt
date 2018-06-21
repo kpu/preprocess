@@ -20,8 +20,11 @@ set(EXE_LIST
 
 set(PREPROCESS_LIBS preprocess_util ${Boost_LIBRARIES} ${THREADS})
 
-AddExes(EXES ${EXE_LIST}
-  LIBRARIES ${PREPROCESS_LIBS})
+foreach(exe ${EXE_LIST})
+  add_executable(${exe} ${exe}_main.cc)
+  target_link_libraries(${exe} ${PREPROCESS_LIBS})
+  set_target_properties(${exe} PROPERTIES FOLDER executables)
+endforeach(exe)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)
