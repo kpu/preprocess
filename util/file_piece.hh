@@ -63,6 +63,10 @@ class FilePiece {
   public:
     // 1 MB default.
     explicit FilePiece(const char *file, std::ostream *show_progress = NULL, std::size_t min_buffer = 1048576);
+
+    // munge filename
+    explicit FilePiece(const char *file, bool munge, std::size_t min_buffer = 1048576);
+
     // Takes ownership of fd.  name is used for messages.
     explicit FilePiece(int fd, const char *name = NULL, std::ostream *show_progress = NULL, std::size_t min_buffer = 1048576);
 
@@ -200,7 +204,7 @@ class FilePiece {
     const char *position_, *last_space_, *position_end_;
 
     scoped_fd file_;
-    const uint64_t total_size_;
+    uint64_t total_size_;
 
     std::size_t default_map_size_;
     uint64_t mapped_offset_;
@@ -216,6 +220,8 @@ class FilePiece {
     std::string file_name_;
 
     ReadCompressed fell_back_;
+
+    bool Open(const std::string &name, std::size_t min_buffer);
 };
 
 } // namespace util

@@ -48,6 +48,44 @@ FilePiece::FilePiece(const char *name, std::ostream *show_progress, std::size_t 
   Initialize(name, show_progress, min_buffer);
 }
 
+FilePiece::FilePiece(const char *name, bool munge, std::size_t min_buffer) :
+  progress_(0, NULL)
+{
+  assert(munge);
+
+  std::string str(name);
+  if (Open(str, min_buffer)) {
+  }
+  else if (Open(str + ".gz", min_buffer)) {
+  }
+  else if (Open(str + ".xz", min_buffer)) {
+  }
+  else {
+    UTIL_THROW(FileOpenException, "File does not exist");
+  }
+
+}
+
+bool FileExist(const char *filename)
+{
+  struct stat   buffer;   
+  return (stat (filename, &buffer) == 0);
+}
+
+bool FilePiece::Open(const std::string &name, std::size_t min_buffer)
+{
+  if (FileExist(name.c_str())) {
+    file_.reset(OpenReadOrThrow(name.c_str()));
+    total_size_ = SizeFile(file_.get());
+    Initialize(name.c_str(), NULL, min_buffer);
+
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
 namespace {
 std::string NamePossiblyFind(int fd, const char *name) {
   if (name) return name;
