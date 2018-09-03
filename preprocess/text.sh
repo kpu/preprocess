@@ -13,7 +13,7 @@ if [ "$2" != 1 ] && [ "$2" != 0 ]; then
 fi
 #If statement hack to only run process unicode if lowercasing.
 "$BINDIR"/process_unicode --language $l --flatten --normalize |"$BINDIR"/../moses/tokenizer/tokenizer.perl -l $l | "$BINDIR"/heuristics.perl -l $l | if [ "$2" == 1 ]; then
-  "$BINDIR"/../moses/normalize-punctuation.perl $l | "$BINDIR"/process_unicode --language $l --lower
+  "$BINDIR"/../moses/tokenizer/normalize-punctuation.perl $l | "$BINDIR"/process_unicode --language $l --lower
 else
-  "$BINDIR"/../moses/normalize-punctuation.perl $l
+  "$BINDIR"/../moses/tokenizer/normalize-punctuation.perl $l
 fi
