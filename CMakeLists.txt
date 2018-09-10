@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 2.6)
 # Define a single cmake project
 project(preprocess)
 
+#Set for FindICU.cmake
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+
 option(FORCE_STATIC "Build static executables" OFF)
 if (FORCE_STATIC)
   #presumably overkill, is there a better way?
@@ -77,6 +80,4 @@ include_directories(
 add_subdirectory(util)
 add_subdirectory(preprocess)
 add_subdirectory(moses)
-
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
