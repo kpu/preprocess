@@ -2,7 +2,8 @@ Most of the code here is licensed under the LGPL.  There are exceptions which ha
 
 util/murmur_hash.cc is under the MIT license.  
 util/string_piece.hh and util/string_piece.cc are Google code.  
-util/file.cc contains a modified implementation of mkstemp under the LGPL. 
+util/file.cc contains a modified implementation of mkstemp under the LGPL.
+FindICU.cmake is under BSD-2 clause license.
 
 For the rest:
 
