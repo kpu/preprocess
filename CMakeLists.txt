@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7.0)
+cmake_minimum_required(VERSION 2.6)
 
 # Define a single cmake project
 project(preprocess)
@@ -77,4 +77,6 @@ include_directories(
 add_subdirectory(util)
 add_subdirectory(preprocess)
 add_subdirectory(moses)
+
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 
