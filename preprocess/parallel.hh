@@ -48,7 +48,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
   } else {
     std::cerr << 
       "To filter one file, run\n" << argv[0] << " <stdin >stdout\n"
-      "To filter parallel files, run\n" << argv[0] << "in0 in1 out0 out1\n";
+      "To filter parallel files, run\n" << argv[0] << " in0 in1 out0 out1\n";
     return 1;
   }
   std::cerr << "Kept " << output << " / " << input << " = " << (static_cast<float>(output) / static_cast<float>(input)) << std::endl;
