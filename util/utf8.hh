@@ -1,7 +1,7 @@
 /* Utilities for UTF-8.  */
 
-#ifndef UTIL_UTF8__
-#define UTIL_UTF8__
+#ifndef UTIL_UTF8
+#define UTIL_UTF8
 
 #include "util/string_piece.hh"
 
@@ -18,7 +18,7 @@ namespace utf8 {
 
 class NormalizeException : public std::exception {
   public:
-    NormalizeException(const UnicodeString &original, UErrorCode code) throw();
+    NormalizeException(const StringPiece &original, UErrorCode code) throw();
     ~NormalizeException() throw() {}
 
     const char *what() const throw() { return what_.c_str(); }
@@ -63,23 +63,22 @@ class UnsupportedLanguageException : public std::exception {
 
 bool IsUTF8(const StringPiece &text);
 
-bool IsPunctuation(const StringPiece &text) throw(NotUTF8Exception);
+bool IsPunctuation(const StringPiece &text);
 
 // TODO: Implement these in a way that doesn't botch Turkish.
-void ToLower(const UnicodeString &in, UnicodeString &out);
-void ToLower(const StringPiece &in, std::string &out) throw(NotUTF8Exception);
+void ToLower(const StringPiece &in, std::string &out);
 
-void Normalize(const UnicodeString &in, UnicodeString &out) throw(NotUTF8Exception, NormalizeException);
-void Normalize(const StringPiece &in, std::string &out) throw(NotUTF8Exception, NormalizeException);
+void Normalize(const U_ICU_NAMESPACE::UnicodeString &in, U_ICU_NAMESPACE::UnicodeString &out);
+void Normalize(const StringPiece &in, std::string &out);
 
 class FlattenData;
 
 class Flatten {
   public:
-    explicit Flatten(const StringPiece &language) throw(UnsupportedLanguageException);
+    explicit Flatten(const StringPiece &language);
 
-    void Apply(const UnicodeString &in, UnicodeString &out) const throw(NotUTF8Exception);
-    void Apply(const StringPiece &in, std::string &out) const throw (NotUTF8Exception);
+    void Apply(const U_ICU_NAMESPACE::UnicodeString &in, U_ICU_NAMESPACE::UnicodeString &out) const;
+    void Apply(const StringPiece &in, std::string &out) const;
 
   private:
     const FlattenData &data_;
@@ -87,4 +86,4 @@ class Flatten {
 
 } // namespace utf8
 
-#endif
+#endif // UTIL_UTF8

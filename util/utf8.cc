@@ -23,6 +23,8 @@
 
 #include <err.h>
 
+using U_ICU_NAMESPACE::UnicodeString;
+
 namespace utf8 {
 
 // Could be more efficient, but I'm not terribly worried about that.
@@ -38,8 +40,8 @@ NotUTF8Exception::NotUTF8Exception(const StringPiece &original, UErrorCode code)
       what_.append(u_errorName(code));
     }
 
-NormalizeException::NormalizeException(const UnicodeString &original, UErrorCode code) throw() {
-  original.toUTF8String(original_);
+NormalizeException::NormalizeException(const StringPiece &original, UErrorCode code) throw() 
+  : original_(original.data(), original.length()) {
   what_ = "Normalization of '";
   what_ += original_;
   what_ += "' failed:";
@@ -57,7 +59,7 @@ bool IsUTF8(const StringPiece &str) {
   return true;
 }
 
-bool IsPunctuation(const StringPiece &str) throw(NotUTF8Exception) {
+bool IsPunctuation(const StringPiece &str) {
   int32_t offset = 0;
   int32_t length = static_cast<uint32_t>(str.size());
   while (offset < length) {
@@ -69,11 +71,6 @@ bool IsPunctuation(const StringPiece &str) throw(NotUTF8Exception) {
     if (!u_ispunct(character)) return false;
   }
   return true;
-}
-
-void ToLower(const UnicodeString &in, UnicodeString &out) {
-  out = in;
-  out.toLower();
 }
 
 namespace {
@@ -117,7 +114,7 @@ const UCaseMap *GetCaseMap() {
 
 } // namespace
 
-void ToLower(const StringPiece &in, std::string &out) throw(NotUTF8Exception) {
+void ToLower(const StringPiece &in, std::string &out) {
   const UCaseMap *csm = GetCaseMap();
   while (true) {
     UErrorCode err_lower = U_ZERO_ERROR;
@@ -136,13 +133,17 @@ void ToLower(const StringPiece &in, std::string &out) throw(NotUTF8Exception) {
   }
 }
 
-void Normalize(const UnicodeString &in, UnicodeString &out) throw(NotUTF8Exception, NormalizeException) {
+void Normalize(const UnicodeString &in, UnicodeString &out) {
   UErrorCode errorcode = U_ZERO_ERROR;
-  Normalizer::normalize(in, UNORM_NFKC, 0, out, errorcode);
-  if (U_FAILURE(errorcode)) throw NormalizeException(in, errorcode);
+  U_ICU_NAMESPACE::Normalizer::normalize(in, UNORM_NFKC, 0, out, errorcode);
+  if (U_FAILURE(errorcode)) {
+    std::string failed;  
+    in.toUTF8String(failed);
+    throw NormalizeException(failed, errorcode);
+  }
 }
 
-void Normalize(const StringPiece &in, std::string &out) throw(NotUTF8Exception, NormalizeException) {
+void Normalize(const StringPiece &in, std::string &out) {
   UnicodeString asuni(UnicodeString::fromUTF8(in));
   if (asuni.isBogus()) throw NotUTF8Exception(in);
   UnicodeString normalized;
@@ -314,7 +315,7 @@ UnsupportedLanguageException::UnsupportedLanguageException(const StringPiece &la
 }
 
 namespace {
-const FlattenData &LookupFlatten(const StringPiece &language) throw(UnsupportedLanguageException) {
+const FlattenData &LookupFlatten(const StringPiece &language) {
   boost::call_once(kAllFlattenDataBuilt, AllFlattenDataPopulate);
   boost::unordered_map<StringPiece, FlattenData>::const_iterator found = kAllFlattenData->find(language);
   if (found == kAllFlattenData->end()) throw UnsupportedLanguageException(language);
@@ -322,9 +323,9 @@ const FlattenData &LookupFlatten(const StringPiece &language) throw(UnsupportedL
 }
 } // namespace
 
-Flatten::Flatten(const StringPiece &language) throw(UnsupportedLanguageException) : data_(LookupFlatten(language)) {}
+Flatten::Flatten(const StringPiece &language) : data_(LookupFlatten(language)) {}
 
-void Flatten::Apply(const UnicodeString &in, UnicodeString &out) const throw(NotUTF8Exception) {
+void Flatten::Apply(const UnicodeString &in, UnicodeString &out) const {
   out.truncate(0);
 
   for (int32_t i = 0; i < in.length();) {
@@ -355,7 +356,7 @@ void Flatten::Apply(const UnicodeString &in, UnicodeString &out) const throw(Not
   }
 }
 
-void Flatten::Apply(const StringPiece &in, std::string &out) const throw(NotUTF8Exception) {
+void Flatten::Apply(const StringPiece &in, std::string &out) const {
   UnicodeString asuni(UnicodeString::fromUTF8(in));
   if (asuni.isBogus()) throw NotUTF8Exception(in);
   UnicodeString normalized;

@@ -11,6 +11,8 @@
 #include <string>
 #include <iostream>
 
+using U_ICU_NAMESPACE::UnicodeString;
+
 namespace {
 struct Options {
   std::string language;
