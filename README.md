@@ -50,6 +50,37 @@ bin/dedupe
 deduplicates text at the line level.
 
 ```bash
+bin/cache slow_program slow_program_args...
+```
+Wraps a deterministic line-based program with a deduplicating cache.  The program should always write exactly one line for each line it reads.  And it may buffer up to a fixed number of lines (run without an argument to see the exact number).
+Example input:
+```
+Repeated line
+Some text
+Repeated line
+More text
+```
+The slow program will only process unique lines:
+```
+Repeated line
+Some text
+More text
+```
+It might translate that to French
+```
+Ligne répétée
+Du texte
+Plus de texte
+```
+Then `cache` will reinsert the cached results for final output:
+```
+Ligne répétée
+Du texte
+Ligne répétée
+Plus de texte
+```
+
+```bash
 bin/shard $prefix $shard_count
 ```
 Shards stdin into multiple files named prefix0 prefix1 prefix2 etc.  This is useful when the deduper above runs out of memory.
@@ -103,3 +134,5 @@ Process the CommonCrawl n-grams raw files into the deduped files:
 * Strip leading and trailing whitespace
 * Deduplicate, preserving the first instance of the line
 * Remove any lines with invalid UTF-8
+
+
