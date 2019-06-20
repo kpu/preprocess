@@ -60,13 +60,13 @@ Some text
 Repeated line
 More text
 ```
-The slow program will only process unique lines:
+The slow program will only see unique lines in its input:
 ```
 Repeated line
 Some text
 More text
 ```
-It might translate that to French
+Suppose the slow program translates to French:
 ```
 Ligne répétée
 Du texte
