@@ -5,6 +5,7 @@ endif()
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
   apply_case
+  cache
   commoncrawl_dedupe
   dedupe
   gigaword_unwrap
