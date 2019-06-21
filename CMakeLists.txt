@@ -5,6 +5,7 @@ project(preprocess)
 
 #Set for FindICU.cmake
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+set (CMAKE_CXX_STANDARD 11)
 
 option(FORCE_STATIC "Build static executables" OFF)
 if (FORCE_STATIC)
