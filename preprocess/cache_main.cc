@@ -47,28 +47,31 @@ struct QueueEntry {
   StringPiece *value;
 };
 
-void Input(util::PCQueue<QueueEntry> &queue, int process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate) {
-  util::FakeOFStream process(process_input);
-  std::pair<uint64_t, StringPiece> entry;
+void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate) {
   QueueEntry q_entry;
-  std::size_t flush_count = flush_rate;
-  for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
-    entry.first = util::MurmurHashNative(l.data(), l.size());
-    std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
-    if (res.second) {
-      // New entry.  Send to captive process.
-      process << l << '\n';
-      // Guarantee we flush to process every so often.
-      if (!--flush_count) {
-        process.Flush();
-        flush_count = flush_rate;
+  {
+    util::FakeOFStream process(process_input.get());
+    std::pair<uint64_t, StringPiece> entry;
+    std::size_t flush_count = flush_rate;
+    for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
+      entry.first = util::MurmurHashNative(l.data(), l.size());
+      std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
+      if (res.second) {
+        // New entry.  Send to captive process.
+        process << l << '\n';
+        // Guarantee we flush to process every so often.
+        if (!--flush_count) {
+          process.Flush();
+          flush_count = flush_rate;
+        }
       }
+      // Pointer to hash table entry.
+      q_entry.value = &res.first->second;
+      // Deadlock here if the captive program buffers too many lines.
+      queue.Produce(q_entry);
     }
-    // Pointer to hash table entry.
-    q_entry.value = &res.first->second;
-    // Deadlock here if the captive program buffers too many lines.
-    queue.Produce(q_entry);
   }
+  process_input.reset();
   // Poison.
   q_entry.value = NULL;
   queue.Produce(q_entry);
@@ -76,7 +79,7 @@ void Input(util::PCQueue<QueueEntry> &queue, int process_input, std::unordered_m
 
 // Read from queue.  If it's not in the cache, read the result from the captive
 // process.
-void Output(util::PCQueue<QueueEntry> &queue, util::scoped_fd &process_output) {
+void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_output) {
   util::FakeOFStream out(STDOUT_FILENO);
   util::FilePiece in(process_output.release());
   // We'll allocate the cached strings into a pool.
@@ -99,21 +102,19 @@ void Output(util::PCQueue<QueueEntry> &queue, util::scoped_fd &process_output) {
 int main(int argc, char *argv[]) {
   // The underlying program can buffer up to kQueueLength - kFlushRate lines.  If it goes above that, deadlock waiting for queue.
   const std::size_t kFlushRate = 4096;
-  const std::size_t kQueueLength = 1048576;
   if (argc < 2) {
-    std::cerr << "Acts as a cache around another program processing one line in, one line out from stdin to stdout.  The program may buffer up to " << (kQueueLength - kFlushRate - 1) << " lines for processing.\n"
+    std::cerr << "Acts as a cache around another program processing one line in, one line out from stdin to stdout.\n"
       "Usage: " << argv[0] << " slow arguments_to_slow\n";
     return 1;
   }
   util::scoped_fd in, out;
   Launch(argv + 1, in, out);
   // We'll deadlock if this queue is full and the program is buffering.
-  util::PCQueue<QueueEntry> queue(kQueueLength);
+  util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
   std::unordered_map<uint64_t, StringPiece> cache;
-  int in_fd = in.get();
   // Run Input and Output concurrently.  Arbitrarily, we'll do Output in the main thread.
-  std::thread input([&queue, in_fd, &cache, kFlushRate]{Input(queue, in_fd, cache, kFlushRate);});
+  std::thread input([&queue, &in, &cache, kFlushRate]{Input(queue, in, cache, kFlushRate);});
   Output(queue, out);
   input.join();
 }

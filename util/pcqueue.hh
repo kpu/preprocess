@@ -72,83 +72,60 @@ inline void WaitSemaphore (Semaphore &on) {
 
 #endif // __APPLE__
 
-/**
- * Producer consumer queue safe for multiple producers and multiple consumers.
- * T must be default constructable and have operator=.
- * The value is copied twice for Consume(T &out) or three times for Consume(),
- * so larger objects should be passed via pointer.
- * Strong exception guarantee if operator= throws.  Undefined if semaphores throw.
- */
-template <class T> class PCQueue : boost::noncopyable {
- public:
-  explicit PCQueue(size_t size)
-   : empty_(size), used_(0),
-     storage_(new T[size]),
-     end_(storage_.get() + size),
-     produce_at_(storage_.get()),
-     consume_at_(storage_.get()) {}
+template <class T> struct UnboundedPage {
+  UnboundedPage() : next(nullptr) {}
+  UnboundedPage *next;
+  T entries[1023];
+};
 
-  // Add a value to the queue.
-  void Produce(const T &val) {
-    WaitSemaphore(empty_);
-    {
-      boost::unique_lock<boost::mutex> produce_lock(produce_at_mutex_);
-      try {
-        *produce_at_ = val;
-      }
-      catch (...) {
-        empty_.post();
-        throw;
-      }
-      if (++produce_at_ == end_) produce_at_ = storage_.get();
+template <class T> class UnboundedSingleQueue : boost::noncopyable {
+  public:
+    UnboundedSingleQueue() : valid_(0) {
+      SetFilling(new UnboundedPage<T>());
+      SetReading(filling_);
     }
-    used_.post();
-  }
 
-  // Consume a value, assigning it to out.
-  T& Consume(T &out) {
-    WaitSemaphore(used_);
-    {
-      boost::unique_lock<boost::mutex> consume_lock(consume_at_mutex_);
-      try {
-        out = *consume_at_;
+    void Produce(const T &val) {
+      if (filling_current_ == filling_end_) {
+        UnboundedPage<T> *next = new UnboundedPage<T>();
+        filling_->next = next;
+        SetFilling(next);
       }
-      catch (...) {
-        used_.post();
-        throw;
-      }
-      if (++consume_at_ == end_) consume_at_ = storage_.get();
+      *(filling_current_++) = val;
+      valid_.post();
     }
-    empty_.post();
-    return out;
-  }
 
-  // Convenience version of Consume that copies the value to return.
-  // The other version is faster.
-  T Consume() {
-    T ret;
-    Consume(ret);
-    return ret;
-  }
+    T& Consume(T &out) {
+      WaitSemaphore(valid_);
+      if (reading_current_ == reading_end_) {
+        SetReading(reading_->next);
+      }
+      out = *(reading_current_++);
+      return out;
+    }
 
- private:
-  // Number of empty spaces in storage_.
-  Semaphore empty_;
-  // Number of occupied spaces in storage_.
-  Semaphore used_;
+  private:
+    void SetFilling(UnboundedPage<T> *to) {
+      filling_ = to;
+      filling_current_ = to->entries;
+      filling_end_ = filling_current_ + sizeof(to->entries) / sizeof(T);
+    }
+    void SetReading(UnboundedPage<T> *to) {
+      reading_.reset(to);
+      reading_current_ = to->entries;
+      reading_end_ = reading_current_ + sizeof(to->entries) / sizeof(T);
+    }
 
-  boost::scoped_array<T> storage_;
+    Semaphore valid_;
 
-  T *const end_;
+    UnboundedPage<T> *filling_;
 
-  // Index for next write in storage_.
-  T *produce_at_;
-  boost::mutex produce_at_mutex_;
+    std::unique_ptr<UnboundedPage<T> > reading_;
 
-  // Index for next read from storage_.
-  T *consume_at_;
-  boost::mutex consume_at_mutex_;
-
+    T *filling_current_;
+    T *filling_end_;
+    T *reading_current_;
+    T *reading_end_;
 };
 
 } // namespace util

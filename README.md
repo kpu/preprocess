@@ -52,7 +52,7 @@ deduplicates text at the line level.
 ```bash
 bin/cache slow_program slow_program_args...
 ```
-Wraps a deterministic line-based program with a deduplicating cache.  The program should always write exactly one line for each line it reads.  And it may buffer up to a fixed number of lines (run without an argument to see the exact number).
+Wraps a deterministic line-based program with a deduplicating cache.  The program should always write exactly one line for each line it reads.
 Example input:
 ```
 Repeated line
