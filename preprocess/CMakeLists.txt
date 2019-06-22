@@ -2,6 +2,8 @@ if (NOT MSVC)
 	set(THREADS pthread)
 endif()
 
+add_library(fields STATIC fields.cc)
+
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
   apply_case
@@ -26,6 +28,8 @@ foreach(exe ${EXE_LIST})
   target_link_libraries(${exe} ${PREPROCESS_LIBS})
   set_target_properties(${exe} PROPERTIES FOLDER executables)
 endforeach(exe)
+
+target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)
