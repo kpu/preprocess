@@ -3,19 +3,19 @@
 
 #include "util/exception.hh"
 
-#include <boost/interprocess/sync/interprocess_semaphore.hpp>
-#include <boost/scoped_array.hpp>
-#include <boost/thread/mutex.hpp>
-#include <boost/utility.hpp>
-
-#include <cerrno>
-
 #ifdef __APPLE__
 #include <mach/semaphore.h>
 #include <mach/task.h>
 #include <mach/mach_traps.h>
 #include <mach/mach.h>
-#endif // __APPLE__
+#elif defined(__linux)
+#include <semaphore.h>
+#else
+#include <boost/interprocess/sync/interprocess_semaphore.hpp>
+#endif
+
+#include <cerrno>
+
 
 namespace util {
 
@@ -53,6 +53,39 @@ inline void WaitSemaphore(Semaphore &semaphore) {
   semaphore.wait();
 }
 
+#elif defined(__linux)
+
+class Semaphore {
+  public:
+    explicit Semaphore(unsigned int value) {
+      UTIL_THROW_IF(sem_init(&sem_, 0, value), ErrnoException, "Could not create semaphore");
+    }
+
+    ~Semaphore() {
+      if (-1 == sem_destroy(&sem_)) {
+        std::cerr << "Could not destroy semaphore " << ErrnoException().what() << std::endl;
+        abort();
+      }
+    }
+
+    void wait() {
+      while (UTIL_UNLIKELY(-1 == sem_wait(&sem_))) {
+        UTIL_THROW_IF(errno != EINTR, ErrnoException, "Wait for semaphore failed");
+      }
+    }
+
+    void post() {
+      UTIL_THROW_IF(-1 == sem_post(&sem_), ErrnoException, "Could not post to semaphore");
+    }
+
+  private:
+    sem_t sem_;
+};
+
+inline void WaitSemaphore(Semaphore &semaphore) {
+  semaphore.wait();
+}
+
 #else
 typedef boost::interprocess::interprocess_semaphore Semaphore;
 
@@ -70,7 +103,7 @@ inline void WaitSemaphore (Semaphore &on) {
   }
 }
 
-#endif // __APPLE__
+#endif // Apple
 
 template <class T> struct UnboundedPage {
   UnboundedPage() : next(nullptr) {}
@@ -78,7 +111,7 @@ template <class T> struct UnboundedPage {
   T entries[1023];
 };
 
-template <class T> class UnboundedSingleQueue : boost::noncopyable {
+template <class T> class UnboundedSingleQueue {
   public:
     UnboundedSingleQueue() : valid_(0) {
       SetFilling(new UnboundedPage<T>());
@@ -126,6 +159,9 @@ template <class T> class UnboundedSingleQueue : boost::noncopyable {
     T *filling_end_;
     T *reading_current_;
     T *reading_end_;
+
+    UnboundedSingleQueue(const UnboundedSingleQueue &) = delete;
+    UnboundedSingleQueue &operator=(const UnboundedSingleQueue &) = delete;
 };
 
 } // namespace util
