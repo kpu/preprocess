@@ -11,6 +11,8 @@
 
 #include <signal.h>
 #include <sys/prctl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
@@ -20,7 +22,7 @@ void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
   second.reset(fds[1]);
 }
 
-void Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
+pid_t Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
   util::scoped_fd process_in, process_out;
   Pipe(process_in, in);
   Pipe(out, process_out);
@@ -39,6 +41,7 @@ void Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
     abort();
   }
   // Parent closes parts it doesn't need in destructors.
+  return pid;
 }
 
 struct QueueEntry {
@@ -108,7 +111,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   util::scoped_fd in, out;
-  Launch(argv + 1, in, out);
+  pid_t child = Launch(argv + 1, in, out);
   // We'll deadlock if this queue is full and the program is buffering.
   util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
@@ -117,4 +120,11 @@ int main(int argc, char *argv[]) {
   std::thread input([&queue, &in, &cache, kFlushRate]{Input(queue, in, cache, kFlushRate);});
   Output(queue, out);
   input.join();
+  int status;
+  UTIL_THROW_IF(-1 == waitpid(child, &status, 0), util::ErrnoException, "waitpid for child failed");
+  if (WIFEXITED(status)) {
+    return WEXITSTATUS(status);
+  } else {
+    return 256;
+  }
 }
