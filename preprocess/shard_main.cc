@@ -75,21 +75,6 @@ void ParseArgs(int argc, char *argv[], Options &out) {
   }
 }
 
-// This is called with the parts of the input that relate to the key.
-class HashCallback {
-  public:
-    HashCallback() : hash_(47849374332489ULL) /* Be different from deduper */ {}
-
-    void operator()(StringPiece key) {
-      hash_ = util::MurmurHashNative(key.data(), key.size(), hash_);
-    }
-
-    uint64_t Hash() const { return hash_; }
-
-  private:
-    uint64_t hash_;
-};
-
 } // namespace preprocess
 
 int main(int argc, char *argv[]) {

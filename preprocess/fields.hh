@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/string_piece.hh"
+#include "util/murmur_hash.hh"
 
 #include <algorithm>
 #include <limits>
@@ -71,5 +72,20 @@ template <class Functor> inline void RangeFields(StringPiece str, const std::vec
   }
   return;
 }
+
+// This is called with the parts of the input that relate to the key.
+class HashCallback {
+  public:
+    explicit HashCallback(uint64_t seed = 47849374332489ULL) : hash_(seed) /* Be different from deduper */ {}
+
+    void operator()(StringPiece key) {
+      hash_ = util::MurmurHashNative(key.data(), key.size(), hash_);
+    }
+
+    uint64_t Hash() const { return hash_; }
+
+  private:
+    uint64_t hash_;
+};
 
 } // namespace preprocess
