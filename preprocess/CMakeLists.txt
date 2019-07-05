@@ -16,6 +16,7 @@ set(EXE_LIST
   remove_long_lines
   select_latin
   shard
+  substitute
   train_case
   truecase
   vocab
@@ -30,6 +31,7 @@ foreach(exe ${EXE_LIST})
 endforeach(exe)
 
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
+target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)
