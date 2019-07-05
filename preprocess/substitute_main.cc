@@ -66,5 +66,6 @@ int main() {
       it->value = StringPiece(mem, value.size());
       out << line;
     }
+    out << '\n';
   }
 }
