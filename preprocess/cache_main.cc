@@ -15,6 +15,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
+
+struct Options {
+  int key;
+  std::string field_separator;
+};
+
 void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
   int fds[2];
   UTIL_THROW_IF(pipe(fds), util::ErrnoException, "Creating pipe failed");
@@ -50,14 +59,37 @@ struct QueueEntry {
   StringPiece *value;
 };
 
-void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate) {
+void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
     util::FakeOFStream process(process_input.get());
     std::pair<uint64_t, StringPiece> entry;
     std::size_t flush_count = flush_rate;
     for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
-      entry.first = util::MurmurHashNative(l.data(), l.size());
+      if (options.key <= 0){
+        entry.first = util::MurmurHashNative(l.data(), l.size());
+      }
+      else{
+        std::vector<std::string> columns;
+
+        size_t pos = 0;
+        std::string token;
+	std::string s (l.data(), l.size());
+        while ((pos = s.find(options.field_separator)) != std::string::npos) {
+          token = s.substr(0, pos);
+	  columns.push_back(token);
+          s.erase(0, pos + options.field_separator.length());
+	}
+	columns.push_back(s);
+        if (columns.size() < options.key){
+          entry.first = util::MurmurHashNative(l.data(), l.size());
+        }
+	else{
+          entry.first = util::MurmurHashNative(columns.at(options.key-1).c_str(), columns.at(options.key-1).size());
+	}
+
+
+      }
       std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
       if (res.second) {
         // New entry.  Send to captive process.
@@ -102,22 +134,43 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   }
 }
 
+void ParseArgs(int argc, char *argv[], Options &out) {
+  namespace po = boost::program_options;
+  po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout.");
+  desc.add_options()
+    ("key,k", po::value<int>(&out.key)->default_value(-1), "Column(s) key to use as the deduplication string")
+    ("field_separator,t", po::value(&out.field_separator)->default_value("\t"), "use a field separator instead of tab");
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+}
+
 int main(int argc, char *argv[]) {
   // The underlying program can buffer up to kQueueLength - kFlushRate lines.  If it goes above that, deadlock waiting for queue.
   const std::size_t kFlushRate = 4096;
-  if (argc < 2) {
-    std::cerr << "Acts as a cache around another program processing one line in, one line out from stdin to stdout.\n"
-      "Usage: " << argv[0] << " slow arguments_to_slow\n";
-    return 1;
+  Options opt;
+  int skip_args = 1;
+  std::string s1(argv[1]);
+  if (s1 == "-k" || s1 == "-t" || s1 == "--key" || s1 == "--field_separator"){
+    skip_args += 2;
   }
+  if (argc > 3){
+    std::string s3(argv[3]);
+    if (s3 == "-k" || s3 == "-t" || s3 == "--key" || s3 == "--field_separator"){
+      skip_args += 2;
+    }
+  }
+  char *partArgs[skip_args-1];
+  std::copy(argv, &argv[skip_args], partArgs);
+  ParseArgs(argc, partArgs, opt);
   util::scoped_fd in, out;
-  pid_t child = Launch(argv + 1, in, out);
+  pid_t child = Launch(argv + skip_args, in, out);
   // We'll deadlock if this queue is full and the program is buffering.
   util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
   std::unordered_map<uint64_t, StringPiece> cache;
   // Run Input and Output concurrently.  Arbitrarily, we'll do Output in the main thread.
-  std::thread input([&queue, &in, &cache, kFlushRate]{Input(queue, in, cache, kFlushRate);});
+  std::thread input([&queue, &in, &cache, kFlushRate, &opt]{Input(queue, in, cache, kFlushRate, opt);});
   Output(queue, out);
   input.join();
   int status;
