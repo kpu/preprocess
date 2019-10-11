@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <limits>
 
 #include <signal.h>
 #include <sys/prctl.h>
@@ -20,7 +21,7 @@
 #include <boost/program_options/variables_map.hpp>
 
 struct Options {
-  int key;
+  std::string key;
   std::string field_separator;
 };
 
@@ -65,31 +66,59 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
     util::FakeOFStream process(process_input.get());
     std::pair<uint64_t, StringPiece> entry;
     std::size_t flush_count = flush_rate;
+    // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
+    std::vector<int> columns_args;
+
+    size_t pos_args = 0;
+    std::string token_args;
+    std::string s_args = options.key;
+    while ((pos_args = s_args.find(",")) != std::string::npos) {
+      token_args = s_args.substr(0, pos_args);
+      std::string::size_type sz;
+      int int_token_args = std::stoi (token_args, &sz);
+      columns_args.push_back(int_token_args);
+      s_args.erase(0, pos_args + 1);
+    }
+    std::string::size_type sz;
+    int last_int_token_args = std::stoi (s_args, &sz);
+    columns_args.push_back(last_int_token_args);
+
     for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
-      if (options.key <= 0){
+      // Split content columns, if given using --key option, into a string vector
+      std::vector<std::string> columns;
+ 
+      size_t pos = 0;
+      std::string token;
+      std::string s (l.data(), l.size());
+      while ((pos = s.find(options.field_separator)) != std::string::npos) {
+        token = s.substr(0, pos);
+        columns.push_back(token);
+        s.erase(0, pos + options.field_separator.length());
+      }
+      columns.push_back(s);
+      // Get max/min argument --key to manage some errors
+      int min = std::numeric_limits<int>::max();
+      int max = 0;
+      for (int i : columns_args){
+        if (i < min){
+          min = i;
+        }
+        if (i > max){
+          max = i;
+        }
+      }
+      // If any column number is out of boundaries (or --key is not provided, so uses default -1), use the whole line as data for mmh
+      if (columns.size() < max || min <= 0){
         entry.first = util::MurmurHashNative(l.data(), l.size());
       }
       else{
-        std::vector<std::string> columns;
-
-        size_t pos = 0;
-        std::string token;
-	std::string s (l.data(), l.size());
-        while ((pos = s.find(options.field_separator)) != std::string::npos) {
-          token = s.substr(0, pos);
-	  columns.push_back(token);
-          s.erase(0, pos + options.field_separator.length());
-	}
-	columns.push_back(s);
-        if (columns.size() < options.key){
-          entry.first = util::MurmurHashNative(l.data(), l.size());
+        std::string hash_string;
+        for (int i : columns_args){
+          hash_string += columns.at(i-1);
         }
-	else{
-          entry.first = util::MurmurHashNative(columns.at(options.key-1).c_str(), columns.at(options.key-1).size());
-	}
-
-
+        entry.first = util::MurmurHashNative(hash_string.c_str(), hash_string.size());
       }
+
       std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
       if (res.second) {
         // New entry.  Send to captive process.
@@ -134,11 +163,12 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   }
 }
 
+// Parse arguments using boost::program_options
 void ParseArgs(int argc, char *argv[], Options &out) {
   namespace po = boost::program_options;
   po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout.");
   desc.add_options()
-    ("key,k", po::value<int>(&out.key)->default_value(-1), "Column(s) key to use as the deduplication string")
+    ("key,k", po::value(&out.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
     ("field_separator,t", po::value(&out.field_separator)->default_value("\t"), "use a field separator instead of tab");
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -148,6 +178,8 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 int main(int argc, char *argv[]) {
   // The underlying program can buffer up to kQueueLength - kFlushRate lines.  If it goes above that, deadlock waiting for queue.
   const std::size_t kFlushRate = 4096;
+  
+  // Take into account the number of arguments given to `cache` to delete them from the argv provided to Launch function
   Options opt;
   int skip_args = 1;
   std::string s1(argv[1]);
@@ -160,9 +192,10 @@ int main(int argc, char *argv[]) {
       skip_args += 2;
     }
   }
-  char *partArgs[skip_args-1];
-  std::copy(argv, &argv[skip_args], partArgs);
-  ParseArgs(argc, partArgs, opt);
+  char *partArgs[skip_args];
+  std::copy(argv, &argv[skip_args+1], partArgs);
+  ParseArgs(skip_args, partArgs, opt);
+
   util::scoped_fd in, out;
   pid_t child = Launch(argv + skip_args, in, out);
   // We'll deadlock if this queue is full and the program is buffering.
