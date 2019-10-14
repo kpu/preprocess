@@ -30,6 +30,7 @@ foreach(exe ${EXE_LIST})
   set_target_properties(${exe} PROPERTIES FOLDER executables)
 endforeach(exe)
 
+target_link_libraries(cache ${PREPROCESS_LIBS} fields)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 

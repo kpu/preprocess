@@ -1,5 +1,7 @@
 #include "util/fake_ofstream.hh"
 #include "util/file_piece.hh"
+#include "util/string_piece.hh"
+
 #include "util/file.hh"
 #include "util/murmur_hash.hh"
 #include "util/pcqueue.hh"
@@ -15,14 +17,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <preprocess/fields.hh>
 
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
 
+using namespace preprocess;
+
 struct Options {
   std::string key;
-  std::string field_separator;
+  char field_separator;
 };
 
 void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
@@ -60,6 +65,15 @@ struct QueueEntry {
   StringPiece *value;
 };
 
+struct HashWithSeed {
+  HashWithSeed() { hash = 0; }
+  void operator()(StringPiece sp) { size_t result = util::MurmurHashNative(sp.data(), sp.size(), hash); hash = result; }
+  size_t get_hash() { return hash; }
+
+private:
+  size_t hash;
+};
+
 void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
@@ -67,58 +81,12 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
     std::pair<uint64_t, StringPiece> entry;
     std::size_t flush_count = flush_rate;
     // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
-    std::vector<int> columns_args;
-
-    size_t pos_args = 0;
-    std::string token_args;
-    std::string s_args = options.key;
-    while ((pos_args = s_args.find(",")) != std::string::npos) {
-      token_args = s_args.substr(0, pos_args);
-      std::string::size_type sz;
-      int int_token_args = std::stoi (token_args, &sz);
-      columns_args.push_back(int_token_args);
-      s_args.erase(0, pos_args + 1);
-    }
-    std::string::size_type sz;
-    int last_int_token_args = std::stoi (s_args, &sz);
-    columns_args.push_back(last_int_token_args);
-
+    std::vector<FieldRange> indices;
+    ParseFields(options.key.c_str(), indices);
     for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
-      // Split content columns, if given using --key option, into a string vector
-      std::vector<std::string> columns;
- 
-      size_t pos = 0;
-      std::string token;
-      std::string s (l.data(), l.size());
-      while ((pos = s.find(options.field_separator)) != std::string::npos) {
-        token = s.substr(0, pos);
-        columns.push_back(token);
-        s.erase(0, pos + options.field_separator.length());
-      }
-      columns.push_back(s);
-      // Get max/min argument --key to manage some errors
-      int min = std::numeric_limits<int>::max();
-      int max = 0;
-      for (int i : columns_args){
-        if (i < min){
-          min = i;
-        }
-        if (i > max){
-          max = i;
-        }
-      }
-      // If any column number is out of boundaries (or --key is not provided, so uses default -1), use the whole line as data for mmh
-      if (columns.size() < max || min <= 0){
-        entry.first = util::MurmurHashNative(l.data(), l.size());
-      }
-      else{
-        std::string hash_string;
-        for (int i : columns_args){
-          hash_string += columns.at(i-1);
-        }
-        entry.first = util::MurmurHashNative(hash_string.c_str(), hash_string.size());
-      }
-
+      HashWithSeed callback= HashWithSeed();
+      RangeFields(l, indices, options.field_separator, callback);
+      entry.first = callback.get_hash();
       std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
       if (res.second) {
         // New entry.  Send to captive process.
@@ -169,7 +137,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
   po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout.");
   desc.add_options()
     ("key,k", po::value(&out.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
-    ("field_separator,t", po::value(&out.field_separator)->default_value("\t"), "use a field separator instead of tab");
+    ("field_separator,t", po::value<char>(&out.field_separator)->default_value('\t'), "use a field separator instead of tab");
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
@@ -182,19 +150,15 @@ int main(int argc, char *argv[]) {
   // Take into account the number of arguments given to `cache` to delete them from the argv provided to Launch function
   Options opt;
   int skip_args = 1;
-  std::string s1(argv[1]);
-  if (s1 == "-k" || s1 == "-t" || s1 == "--key" || s1 == "--field_separator"){
+  if ( !strcmp(argv[1],"-k") || !strcmp(argv[1],"-t") || !strcmp(argv[1],"--key") || !strcmp(argv[1],"--field_separator")){
     skip_args += 2;
   }
   if (argc > 3){
-    std::string s3(argv[3]);
-    if (s3 == "-k" || s3 == "-t" || s3 == "--key" || s3 == "--field_separator"){
+    if ( !strcmp(argv[3],"-k") || !strcmp(argv[3],"-t") || !strcmp(argv[3],"--key") || !strcmp(argv[3],"--field_separator")){
       skip_args += 2;
     }
   }
-  char *partArgs[skip_args];
-  std::copy(argv, &argv[skip_args+1], partArgs);
-  ParseArgs(skip_args, partArgs, opt);
+  ParseArgs(skip_args, argv, opt);
 
   util::scoped_fd in, out;
   pid_t child = Launch(argv + skip_args, in, out);
@@ -214,3 +178,4 @@ int main(int argc, char *argv[]) {
     return 256;
   }
 }
+
