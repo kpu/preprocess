@@ -71,7 +71,6 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
       }
       // Pointer to hash table entry.
       q_entry.value = &res.first->second;
-      // Deadlock here if the captive program buffers too many lines.
       queue.Produce(q_entry);
     }
   }
@@ -116,17 +115,16 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 }
 
 int main(int argc, char *argv[]) {
-  // The underlying program can buffer up to kQueueLength - kFlushRate lines.  If it goes above that, deadlock waiting for queue.
   const std::size_t kFlushRate = 4096;
   
   // Take into account the number of arguments given to `cache` to delete them from the argv provided to Launch function
   Options opt;
   int skip_args = 1;
-  if ( !strcmp(argv[1],"-k") || !strcmp(argv[1],"-t") || !strcmp(argv[1],"--key") || !strcmp(argv[1],"--field_separator")){
+  if (!strcmp(argv[1],"-k") || !strcmp(argv[1],"-t") || !strcmp(argv[1],"--key") || !strcmp(argv[1],"--field_separator")){
     skip_args += 2;
   }
   if (argc > 3){
-    if ( !strcmp(argv[3],"-k") || !strcmp(argv[3],"-t") || !strcmp(argv[3],"--key") || !strcmp(argv[3],"--field_separator")){
+    if (!strcmp(argv[3],"-k") || !strcmp(argv[3],"-t") || !strcmp(argv[3],"--key") || !strcmp(argv[3],"--field_separator")){
       skip_args += 2;
     }
   }
@@ -134,7 +132,6 @@ int main(int argc, char *argv[]) {
 
   util::scoped_fd in, out;
   pid_t child = Launch(argv + skip_args, in, out);
-  // We'll deadlock if this queue is full and the program is buffering.
   util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
   std::unordered_map<uint64_t, StringPiece> cache;
