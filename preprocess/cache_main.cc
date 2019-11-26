@@ -1,11 +1,13 @@
-#include "util/fake_ofstream.hh"
-#include "util/file_piece.hh"
-#include "util/string_piece.hh"
+#include "preprocess/captive_child.hh"
+#include "preprocess/fields.hh"
 
+#include "util/fake_ofstream.hh"
 #include "util/file.hh"
+#include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/pcqueue.hh"
 #include "util/pool.hh"
+#include "util/string_piece.hh"
 
 #include <string>
 #include <thread>
@@ -17,7 +19,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <preprocess/fields.hh>
 
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
@@ -29,35 +30,6 @@ struct Options {
   std::string key;
   char field_separator;
 };
-
-void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
-  int fds[2];
-  UTIL_THROW_IF(pipe(fds), util::ErrnoException, "Creating pipe failed");
-  first.reset(fds[0]);
-  second.reset(fds[1]);
-}
-
-pid_t Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
-  util::scoped_fd process_in, process_out;
-  Pipe(process_in, in);
-  Pipe(out, process_out);
-  pid_t pid = fork();
-  UTIL_THROW_IF(pid == -1, util::ErrnoException, "Fork failed");
-  if (pid == 0) {
-    // Inside child process.
-    prctl(PR_SET_PDEATHSIG, SIGTERM);
-    UTIL_THROW_IF(-1 == dup2(process_in.get(), STDIN_FILENO), util::ErrnoException, "dup2 failed for process stdin from " << process_in.get());
-    UTIL_THROW_IF(-1 == dup2(process_out.get(), STDOUT_FILENO), util::ErrnoException, "dup2 failed for process stdout from " << process_out.get());
-    in.reset();
-    out.reset();
-    execvp(argv[0], argv);
-    util::ErrnoException e;
-    std::cerr << "exec " << argv[0] << " failed: " << e.what() << std::endl;
-    abort();
-  }
-  // Parent closes parts it doesn't need in destructors.
-  return pid;
-}
 
 struct QueueEntry {
   // NULL pointer is poison.
@@ -170,12 +142,6 @@ int main(int argc, char *argv[]) {
   std::thread input([&queue, &in, &cache, kFlushRate, &opt]{Input(queue, in, cache, kFlushRate, opt);});
   Output(queue, out);
   input.join();
-  int status;
-  UTIL_THROW_IF(-1 == waitpid(child, &status, 0), util::ErrnoException, "waitpid for child failed");
-  if (WIFEXITED(status)) {
-    return WEXITSTATUS(status);
-  } else {
-    return 256;
-  }
+  return Wait(child);
 }
 
