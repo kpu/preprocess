@@ -4,7 +4,9 @@
 #include "util/file.hh"
 
 #include <signal.h>
+#ifdef __linux__
 #include <sys/prctl.h>
+#endif
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -30,7 +32,9 @@ pid_t Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
   UTIL_THROW_IF(pid == -1, util::ErrnoException, "Fork failed");
   if (pid == 0) {
     // Inside child process.
+    #ifdef __linux__
     prctl(PR_SET_PDEATHSIG, SIGTERM);
+    #endif
     UTIL_THROW_IF(-1 == dup2(process_in.get(), STDIN_FILENO), util::ErrnoException, "dup2 failed for process stdin from " << process_in.get());
     UTIL_THROW_IF(-1 == dup2(process_out.get(), STDOUT_FILENO), util::ErrnoException, "dup2 failed for process stdout from " << process_out.get());
     in.reset();
