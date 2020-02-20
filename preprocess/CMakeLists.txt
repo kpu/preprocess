@@ -3,6 +3,7 @@ if (NOT MSVC)
 endif()
 
 add_library(fields STATIC fields.cc)
+add_library(captive_child STATIC captive_child.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
@@ -30,6 +31,7 @@ foreach(exe ${EXE_LIST})
   set_target_properties(${exe} PROPERTIES FOLDER executables)
 endforeach(exe)
 
+target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 

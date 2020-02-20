@@ -1,13 +1,18 @@
+#include "preprocess/captive_child.hh"
+#include "preprocess/fields.hh"
+
 #include "util/fake_ofstream.hh"
-#include "util/file_piece.hh"
 #include "util/file.hh"
+#include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/pcqueue.hh"
 #include "util/pool.hh"
+#include "util/string_piece.hh"
 
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <limits>
 
 #include <signal.h>
 #include <sys/prctl.h>
@@ -15,34 +20,16 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void Pipe(util::scoped_fd &first, util::scoped_fd &second) {
-  int fds[2];
-  UTIL_THROW_IF(pipe(fds), util::ErrnoException, "Creating pipe failed");
-  first.reset(fds[0]);
-  second.reset(fds[1]);
-}
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/parsers.hpp>
+#include <boost/program_options/variables_map.hpp>
 
-pid_t Launch(char *argv[], util::scoped_fd &in, util::scoped_fd &out) {
-  util::scoped_fd process_in, process_out;
-  Pipe(process_in, in);
-  Pipe(out, process_out);
-  pid_t pid = fork();
-  UTIL_THROW_IF(pid == -1, util::ErrnoException, "Fork failed");
-  if (pid == 0) {
-    // Inside child process.
-    prctl(PR_SET_PDEATHSIG, SIGTERM);
-    UTIL_THROW_IF(-1 == dup2(process_in.get(), STDIN_FILENO), util::ErrnoException, "dup2 failed for process stdin from " << process_in.get());
-    UTIL_THROW_IF(-1 == dup2(process_out.get(), STDOUT_FILENO), util::ErrnoException, "dup2 failed for process stdout from " << process_out.get());
-    in.reset();
-    out.reset();
-    execvp(argv[0], argv);
-    util::ErrnoException e;
-    std::cerr << "exec " << argv[0] << " failed: " << e.what() << std::endl;
-    abort();
-  }
-  // Parent closes parts it doesn't need in destructors.
-  return pid;
-}
+using namespace preprocess;
+
+struct Options {
+  std::string key;
+  char field_separator;
+};
 
 struct QueueEntry {
   // NULL pointer is poison.
@@ -50,14 +37,28 @@ struct QueueEntry {
   StringPiece *value;
 };
 
-void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate) {
+struct HashWithSeed {
+  HashWithSeed() { hash = 0; }
+  void operator()(StringPiece sp) { size_t result = util::MurmurHashNative(sp.data(), sp.size(), hash); hash = result; }
+  size_t get_hash() { return hash; }
+
+private:
+  size_t hash;
+};
+
+void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
     util::FakeOFStream process(process_input.get());
     std::pair<uint64_t, StringPiece> entry;
     std::size_t flush_count = flush_rate;
+    // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
+    std::vector<FieldRange> indices;
+    ParseFields(options.key.c_str(), indices);
     for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
-      entry.first = util::MurmurHashNative(l.data(), l.size());
+      HashWithSeed callback= HashWithSeed();
+      RangeFields(l, indices, options.field_separator, callback);
+      entry.first = callback.get_hash();
       std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
       if (res.second) {
         // New entry.  Send to captive process.
@@ -70,7 +71,6 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
       }
       // Pointer to hash table entry.
       q_entry.value = &res.first->second;
-      // Deadlock here if the captive program buffers too many lines.
       queue.Produce(q_entry);
     }
   }
@@ -102,29 +102,43 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   }
 }
 
+// Parse arguments using boost::program_options
+void ParseArgs(int argc, char *argv[], Options &out) {
+  namespace po = boost::program_options;
+  po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout.");
+  desc.add_options()
+    ("key,k", po::value(&out.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
+    ("field_separator,t", po::value<char>(&out.field_separator)->default_value('\t'), "use a field separator instead of tab");
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+}
+
 int main(int argc, char *argv[]) {
-  // The underlying program can buffer up to kQueueLength - kFlushRate lines.  If it goes above that, deadlock waiting for queue.
   const std::size_t kFlushRate = 4096;
-  if (argc < 2) {
-    std::cerr << "Acts as a cache around another program processing one line in, one line out from stdin to stdout.\n"
-      "Usage: " << argv[0] << " slow arguments_to_slow\n";
-    return 1;
+  
+  // Take into account the number of arguments given to `cache` to delete them from the argv provided to Launch function
+  Options opt;
+  int skip_args = 1;
+  if (!strcmp(argv[1],"-k") || !strcmp(argv[1],"-t") || !strcmp(argv[1],"--key") || !strcmp(argv[1],"--field_separator")){
+    skip_args += 2;
   }
+  if (argc > 3){
+    if (!strcmp(argv[3],"-k") || !strcmp(argv[3],"-t") || !strcmp(argv[3],"--key") || !strcmp(argv[3],"--field_separator")){
+      skip_args += 2;
+    }
+  }
+  ParseArgs(skip_args, argv, opt);
+
   util::scoped_fd in, out;
-  pid_t child = Launch(argv + 1, in, out);
-  // We'll deadlock if this queue is full and the program is buffering.
+  pid_t child = Launch(argv + skip_args, in, out);
   util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
   std::unordered_map<uint64_t, StringPiece> cache;
   // Run Input and Output concurrently.  Arbitrarily, we'll do Output in the main thread.
-  std::thread input([&queue, &in, &cache, kFlushRate]{Input(queue, in, cache, kFlushRate);});
+  std::thread input([&queue, &in, &cache, kFlushRate, &opt]{Input(queue, in, cache, kFlushRate, opt);});
   Output(queue, out);
   input.join();
-  int status;
-  UTIL_THROW_IF(-1 == waitpid(child, &status, 0), util::ErrnoException, "waitpid for child failed");
-  if (WIFEXITED(status)) {
-    return WEXITSTATUS(status);
-  } else {
-    return 256;
-  }
+  return Wait(child);
 }
+
