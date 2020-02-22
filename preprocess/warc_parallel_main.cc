@@ -168,7 +168,6 @@ void Run(const Options &options, char *child[]) {
     readers.push_back(ReadInput, 0, &pool.InputQueue());
   } else {
     for (const std::string &name : options.inputs) {
-      std::cerr << "Reading from " << name << std::endl;
       readers.push_back(ReadInput, util::OpenReadOrThrow(name.c_str()), &pool.InputQueue());
     }
   }
