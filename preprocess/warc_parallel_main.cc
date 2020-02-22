@@ -6,6 +6,9 @@
 #include "util/fixed_array.hh"
 #include "util/pcqueue.hh"
 
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <mutex>
 #include <string>
 #include <thread>
@@ -53,22 +56,34 @@ class Worker {
   public:
     Worker(util::PCQueue<std::string> &in, util::FakeOFStream &out, std::mutex &out_mutex, char *argv[]) {
       util::scoped_fd in_file, out_file;
-      pid_ = Launch(argv, in_file, out_file);
+      Launch(argv, in_file, out_file);
       input_ = std::thread(InputToProcess, &in, in_file.release());
       output_ = std::thread(OutputFromProcess, out_file.release(), &out, &out_mutex);
     }
 
     void Join() {
       input_.join();
-      int result = Wait(pid_);
-      UTIL_THROW_IF2(result, "Child process returned " << result);
       output_.join();
     }
 
   private:
-    pid_t pid_;
     std::thread input_, output_;
 };
+
+void ChildReaper(std::size_t expect) {
+  try {
+    for (; expect; --expect) {
+      int wstatus;
+      pid_t process = waitpid(-1, &wstatus, 0);
+      UTIL_THROW_IF(-1 == process, util::ErrnoException, "waitpid");
+      UTIL_THROW_IF(!WIFEXITED(wstatus), util::Exception, "Child process " << process << " terminated abnormally.");
+      UTIL_THROW_IF(WEXITSTATUS(wstatus), util::Exception, "Child process " << process << " terminated with code " << WEXITSTATUS(wstatus) << ".");
+    }
+  } catch (const std::exception &e) {
+    std::cerr << e.what() << std::endl;
+    abort();
+  }
+}
 
 class WorkerPool {
   public:
@@ -76,6 +91,7 @@ class WorkerPool {
       for (std::size_t i = 0; i < number; ++i) {
         workers_.push_back(in_, out, out_mutex_, argv);
       }
+      child_reaper_ = std::thread(ChildReaper, number);
     }
 
     util::PCQueue<std::string> &InputQueue() { return in_; }
@@ -89,12 +105,15 @@ class WorkerPool {
       for (Worker &i : workers_) {
         i.Join();
       }
+      child_reaper_.join();
     }
     
   private:
     util::PCQueue<std::string> in_;
     std::mutex out_mutex_;
     util::FixedArray<Worker> workers_;
+
+    std::thread child_reaper_;
 };
 
 struct Options {
@@ -161,6 +180,7 @@ char **FindChild(int argc, char *argv[]) {
 
 void Run(const Options &options, char *child[]) {
   util::FakeOFStream out(1);
+
   WorkerPool pool(options.workers, out, child);
 
   util::FixedArray<std::thread> readers(options.inputs.empty() ? 1 : options.inputs.size());
@@ -175,7 +195,6 @@ void Run(const Options &options, char *child[]) {
     r.join();
   }
   pool.Join();
-
 }
 
 } // namespace
