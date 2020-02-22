@@ -17,7 +17,7 @@
 namespace util {
 class FakeOFStream {
   public:
-    static const std::size_t kOutBuf = 1048576;
+    static const std::size_t kOutBuf = 16384;
 
     // Does not take ownership of out.
     explicit FakeOFStream(int out)

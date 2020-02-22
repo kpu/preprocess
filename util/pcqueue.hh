@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <iostream>
 #include <mutex>
 
 #ifdef __APPLE__

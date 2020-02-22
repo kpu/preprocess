@@ -138,13 +138,13 @@ template <class T> class FixedArray {
      * I miss C++11 variadic templates.
      */
 #if __cplusplus >= 201103L
-    template <typename... Construct> T *emplace_back(Construct... construct) {
+    template <typename... Construct> T *emplace_back(Construct&&... construct) {
       T *ret = end();
       new (end()) T(construct...);
       Constructed();
       return ret;
     }
-    template <typename... Construct> T *push_back(Construct... construct) {
+    template <typename... Construct> T *push_back(Construct&&... construct) {
       T *ret = end();
       new (end()) T(construct...);
       Constructed();
