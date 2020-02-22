@@ -3,6 +3,10 @@
 
 #include "util/exception.hh"
 
+#include <algorithm>
+#include <cerrno>
+#include <mutex>
+
 #ifdef __APPLE__
 #include <mach/semaphore.h>
 #include <mach/task.h>
@@ -13,9 +17,6 @@
 #else
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #endif
-
-#include <mutex>
-#include <cerrno>
 
 namespace util {
 
@@ -128,8 +129,7 @@ template <class T> class PCQueue {
       std::lock_guard<std::mutex> produce_lock(produce_at_mutex_);
       try {
         *produce_at_ = val;
-      }
-      catch (...) {
+      } catch (...) {
         empty_.post();
         throw;
       }
@@ -138,6 +138,23 @@ template <class T> class PCQueue {
     used_.post();
   }
 
+  // Add a value to the queue, but swap it into place.
+  void ProduceSwap(T &val) {
+    WaitSemaphore(empty_);
+    {
+      std::lock_guard<std::mutex> produce_lock(produce_at_mutex_);
+      try {
+        std::swap(*produce_at_, val);
+      } catch (...) {
+        empty_.post();
+        throw;
+      }
+      if (++produce_at_ == end_) produce_at_ = storage_.get();
+    }
+    used_.post();
+  }
+
+
   // Consume a value, assigning it to out.
   T& Consume(T &out) {
     WaitSemaphore(used_);
@@ -145,8 +162,7 @@ template <class T> class PCQueue {
       std::lock_guard<std::mutex> consume_lock(consume_at_mutex_);
       try {
         out = *consume_at_;
-      }
-      catch (...) {
+      } catch (...) {
         used_.post();
         throw;
       }
@@ -155,6 +171,24 @@ template <class T> class PCQueue {
     empty_.post();
     return out;
   }
+
+  // Consume a value, swapping it to out.
+  T& ConsumeSwap(T &out) {
+    WaitSemaphore(used_);
+    {
+      std::lock_guard<std::mutex> consume_lock(consume_at_mutex_);
+      try {
+        std::swap(out, *consume_at_);
+      } catch (...) {
+        used_.post();
+        throw;
+      }
+      if (++consume_at_ == end_) consume_at_ = storage_.get();
+    }
+    empty_.post();
+    return out;
+  }
+
 
   // Convenience version of Consume that copies the value to return.
   // The other version is faster.
