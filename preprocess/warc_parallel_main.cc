@@ -107,7 +107,7 @@ void ParseBoostArgs(int restricted_argc, int real_argc, char *argv[], Options &o
   po::options_description desc("Arguments");
   desc.add_options()
     ("help,h", po::bool_switch(), "Show this help message")
-    ("inputs,i", po::value(&out.inputs), "Input files, which will be read in parallel and jumbled together.  Default: read from stdin.")
+    ("inputs,i", po::value(&out.inputs)->multitoken(), "Input files, which will be read in parallel and jumbled together.  Default: read from stdin.")
     ("jobs,j", po::value(&out.workers)->default_value(std::thread::hardware_concurrency()), "Number of child process workers to use.");
   po::variables_map vm;
   po::store(po::command_line_parser(restricted_argc, argv).options(desc).run(), vm);
