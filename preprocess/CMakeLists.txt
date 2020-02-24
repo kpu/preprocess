@@ -4,6 +4,7 @@ endif()
 
 add_library(fields STATIC fields.cc)
 add_library(captive_child STATIC captive_child.cc)
+add_library(warc STATIC warc.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
@@ -12,6 +13,7 @@ set(EXE_LIST
   commoncrawl_dedupe
   dedupe
   gigaword_unwrap
+  order_independent_hash
   process_unicode
   remove_invalid_utf8
   remove_long_lines
@@ -21,6 +23,7 @@ set(EXE_LIST
   train_case
   truecase
   vocab
+  warc_parallel
 )
 
 set(PREPROCESS_LIBS preprocess_util ${Boost_LIBRARIES} ${THREADS})
@@ -34,6 +37,7 @@ endforeach(exe)
 target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
+target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)

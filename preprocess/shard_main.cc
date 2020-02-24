@@ -31,7 +31,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
     ("delim,d", po::value(&out.delim)->default_value('\t'), "Field delimiter")
     ("prefix,p", po::value(&prefix), "Prefix and count of outputs")
     ("number,n", po::value(&number), "Number of shards")
-    ("output,o", po::value(&out.outputs), "Output file names (or just list them without -o)");
+    ("output,o", po::value(&out.outputs)->multitoken(), "Output file names (or just list them without -o)");
 
   po::positional_options_description pd;
   pd.add("output", -1);
