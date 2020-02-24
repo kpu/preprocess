@@ -16,22 +16,6 @@ void SplitLine(util::FilePiece &from, std::vector<StringPiece> &to) {
   }
 }
 
-bool SameLine(util::FilePiece &f) {
-  while (true) {
-    switch(f.peek()) {
-      case '\n':
-        f.get();
-        return false;
-      case ' ':
-      case '\t':
-        f.get();
-        continue;
-      default:
-        return true;
-    }
-  }
-}
-
 class Recorder {
   public:
     void Add(StringPiece source, StringPiece target) {

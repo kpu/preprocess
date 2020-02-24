@@ -32,7 +32,6 @@ int main() {
   std::vector<preprocess::FieldRange> fields;
   fields.resize(4);
   StringPiece segments[4];
-  StringPiece &before = segments[0];
   fields[0].begin = 0;
   fields[0].end = 2;
   StringPiece &sentences = segments[1];
