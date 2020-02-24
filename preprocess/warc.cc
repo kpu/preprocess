@@ -96,6 +96,7 @@ bool WARCReader::Read(std::string &out) {
   }
   // Check CRLF CRLF.
   UTIL_THROW_IF2(StringPiece(out.data() + out.size() - 4, 4) != StringPiece("\r\n\r\n", 4), "End of WARC record missing CRLF CRLF");
+  return true;
 }
 
 } // namespace preprocess
