@@ -168,6 +168,8 @@ char **FindChild(int argc, char *argv[]) {
     if (!strcmp(a, "--help") || !strcmp(a, "-h")) {
       // Help, doesn't matter, just make sure command is past that.
       return argv + i + 1;
+    } else if (!strcmp(a, "--gzip") || !strcmp(a, "-z")) {
+      i += 1;
     } else if (!strcmp(a, "--jobs") || !strcmp(a, "-j")) {
       UTIL_THROW_IF2(i + 1 == argc, "Expected argument to jobs");
       i += 2;
