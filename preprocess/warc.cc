@@ -2,7 +2,7 @@
 
 #include "util/exception.hh"
 #include "util/file.hh"
-#include "util/read_compressed.hh"
+#include "util/compress.hh"
 
 #include <cstdlib>
 #include <limits>

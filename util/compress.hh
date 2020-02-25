@@ -1,11 +1,12 @@
-#ifndef UTIL_READ_COMPRESSED_H
-#define UTIL_READ_COMPRESSED_H
+#ifndef UTIL_COMPRESS_H
+#define UTIL_COMPRESS_H
 
 #include "util/exception.hh"
 #include "util/scoped.hh"
 
 #include <cstddef>
 #include <stdint.h>
+#include <string>
 
 namespace util {
 
@@ -87,6 +88,10 @@ class ReadCompressed {
     uint64_t raw_amount_;
 };
 
+// Very basic gzip compression support.  Normally this would involve streams
+// but I needed the compression in the thread with fused output.
+void GZCompress(StringPiece from, std::string &to, int level = 9);
+
 } // namespace util
 
-#endif // UTIL_READ_COMPRESSED_H
+#endif // UTIL_COMPRESS_H

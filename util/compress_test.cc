@@ -1,4 +1,4 @@
-#include "util/read_compressed.hh"
+#include "util/compress.hh"
 
 #include "util/file.hh"
 #include "util/have.hh"
@@ -43,7 +43,7 @@ void ReadLoop(ReadCompressed &reader, void *to_void, std::size_t amount) {
 
 const uint32_t kSize4 = 100000 / 4;
 
-std::string WriteRandom() {
+std::string WriteSequence() {
   char name[] = "tempXXXXXX";
   scoped_fd original(mkstemp(name));
   BOOST_REQUIRE(original.get() > 0);
@@ -66,8 +66,8 @@ void VerifyRead(ReadCompressed &reader) {
   BOOST_CHECK_EQUAL((std::size_t)0, reader.Read(&ignored, 1));
 }
 
-void TestRandom(const char *compressor) {
-  std::string name(WriteRandom());
+int ReferenceFile(const char *compressor) {
+  std::string name(WriteSequence());
 
   char gzname[] = "tempXXXXXX";
   scoped_fd gzipped(mkstemp(gzname));
@@ -85,40 +85,58 @@ void TestRandom(const char *compressor) {
 
   BOOST_CHECK_EQUAL(0, unlink(name.c_str()));
   BOOST_CHECK_EQUAL(0, unlink(gzname));
+  return gzipped.release();
+}
 
-  ReadCompressed reader(gzipped.release());
+void TestSequence(const char *compressor) {
+  ReadCompressed reader(ReferenceFile(compressor));
   VerifyRead(reader);
 }
 
 BOOST_AUTO_TEST_CASE(Uncompressed) {
-  TestRandom("cat");
+  TestSequence("cat");
 }
 
 #ifdef HAVE_ZLIB
 BOOST_AUTO_TEST_CASE(ReadGZ) {
-  TestRandom("gzip");
+  TestSequence("gzip");
+}
+BOOST_AUTO_TEST_CASE(WriteGZ) {
+  std::string input;
+  input.resize(kSize4 * 4);
+  for (uint32_t i = 0; i < kSize4; ++i) {
+    memcpy(&input[i * 4], &i, sizeof(uint32_t));
+  }
+  std::string output;
+  GZCompress(input, output, -1);
+
+  scoped_fd written(MakeTemp("compress_test"));
+  WriteOrThrow(written.get(), output.data(), output.size());
+  SeekOrThrow(written.get(), 0);
+  ReadCompressed reader(written.release());
+
+  std::string returned;
+  returned.resize(kSize4 * 4);
+  BOOST_REQUIRE_EQUAL(input.size(), reader.ReadOrEOF(&returned[0], returned.size()));
+
+  BOOST_CHECK(returned == input);
 }
 #endif // HAVE_ZLIB
 
 #ifdef HAVE_BZLIB
 BOOST_AUTO_TEST_CASE(ReadBZ) {
-  TestRandom("bzip2");
+  TestSequence("bzip2");
 }
 #endif // HAVE_BZLIB
 
 #ifdef HAVE_XZLIB
 BOOST_AUTO_TEST_CASE(ReadXZ) {
-  TestRandom("xz");
-}
-#endif
-
-#ifdef HAVE_ZLIB
-BOOST_AUTO_TEST_CASE(AppendGZ) {
+  TestSequence("xz");
 }
 #endif
 
 BOOST_AUTO_TEST_CASE(IStream) {
-  std::string name(WriteRandom());
+  std::string name(WriteSequence());
   std::fstream stream(name.c_str(), std::ios::in);
   BOOST_CHECK_EQUAL(0, unlink(name.c_str()));
   ReadCompressed reader;

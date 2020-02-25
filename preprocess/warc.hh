@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/read_compressed.hh"
+#include "util/compress.hh"
 
 #include <string>
 

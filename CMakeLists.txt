@@ -60,9 +60,6 @@ if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w34716")
 endif()
 
-# And our helper modules
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
-
 # We need boost
 find_package(Boost 1.41.0 REQUIRED COMPONENTS
   program_options

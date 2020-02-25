@@ -1,4 +1,4 @@
-#include "util/read_compressed.hh"
+#include "util/compress.hh"
 
 #include "util/file.hh"
 #include "util/have.hh"
@@ -148,22 +148,11 @@ template <class Compression> class StreamCompressed : public ReadBase {
 #ifdef HAVE_ZLIB
 class GZip {
   public:
-    GZip(const void *base, std::size_t amount) {
-      SetInput(base, amount);
+    GZip() {
       stream_.zalloc = Z_NULL;
       stream_.zfree = Z_NULL;
       stream_.opaque = Z_NULL;
       stream_.msg = NULL;
-      // 32 for zlib and gzip decoding with automatic header detection.
-      // 15 for maximum window size.
-      UTIL_THROW_IF(Z_OK != inflateInit2(&stream_, 32 + 15), GZException, "Failed to initialize zlib.");
-    }
-
-    ~GZip() {
-      if (Z_OK != inflateEnd(&stream_)) {
-        std::cerr << "zlib could not close properly." << std::endl;
-        abort();
-      }
     }
 
     void SetOutput(void *to, std::size_t amount) {
@@ -179,6 +168,26 @@ class GZip {
 
     const z_stream &Stream() const { return stream_; }
 
+  protected:
+    z_stream stream_;
+};
+
+class GZipRead : public GZip {
+  public:
+    GZipRead(const void *base, std::size_t amount) {
+      SetInput(base, amount);
+      // 32 for zlib and gzip decoding with automatic header detection.
+      // 15 for maximum window size.
+      UTIL_THROW_IF(Z_OK != inflateInit2(&stream_, 32 + 15), GZException, "Failed to initialize zlib.");
+    }
+
+    ~GZipRead() {
+      if (Z_OK != inflateEnd(&stream_)) {
+        std::cerr << "zlib could not close properly." << std::endl;
+        abort();
+      }
+    }
+
     bool Process() {
       int result = inflate(&stream_, 0);
       switch (result) {
@@ -192,9 +201,44 @@ class GZip {
           UTIL_THROW(GZException, "zlib encountered " << (stream_.msg ? stream_.msg : "an error ") << " code " << result);
       }
     }
+};
 
-  private:
-    z_stream stream_;
+class GZipWrite : public GZip {
+  public:
+    explicit GZipWrite(int level) {
+      UTIL_THROW_IF(Z_OK != deflateInit2(
+            &stream_,
+            level,
+            Z_DEFLATED,
+            16 /* gzip support */ + 15 /* default window */,
+            8 /* default */,
+            Z_DEFAULT_STRATEGY), GZException, "Failed to initialize zlib decompression.");
+    }
+
+    ~GZipWrite() {
+      deflateEnd(&stream_);
+    }
+
+    void Process() {
+      int result = deflate(&stream_, Z_NO_FLUSH);
+      UTIL_THROW_IF(Z_OK != result, GZException, "zlib encountered " << (stream_.msg ? stream_.msg : "an error ") << " code " << result);
+    }
+
+    bool Finish() {
+      UTIL_THROW_IF(!stream_.avail_out, Exception, "No available output.");
+      int result = deflate(&stream_, Z_FINISH);
+      switch (result) {
+        case Z_STREAM_END:
+          return true;
+        case Z_OK:
+          return false;
+        // "If deflate returns with Z_OK or Z_BUF_ERROR, this function must be called again with Z_FINISH and more output space"
+        case Z_BUF_ERROR:
+          return false;
+        default:
+          UTIL_THROW(GZException, "zlib encountered " << (stream_.msg ? stream_.msg : "an error ") << " code " << result);
+      }
+    }
 };
 #endif // HAVE_ZLIB
 
@@ -371,7 +415,7 @@ ReadBase *ReadFactory(int fd, uint64_t &raw_amount, const void *already_data, co
   switch (DetectMagic(&header[0], header.size())) {
     case UTIL_GZIP:
 #ifdef HAVE_ZLIB
-      return new StreamCompressed<GZip>(hold.release(), header.data(), header.size());
+      return new StreamCompressed<GZipRead>(hold.release(), header.data(), header.size());
 #else
       UTIL_THROW(CompressedException, "This looks like a gzip file but gzip support was not compiled in.");
 #endif
@@ -434,5 +478,40 @@ std::size_t ReadCompressed::ReadOrEOF(void *const to_in, std::size_t amount) {
   }
   return to - reinterpret_cast<uint8_t*>(to_in);
 }
+
+#ifdef HAVE_ZLIB
+namespace {
+
+void EnsureOutput(GZipWrite &writer, std::string &to) {
+  const std::size_t increment = 1024;
+  if (writer.Stream().avail_out < 6 ) {
+    std::size_t old_size = to.size();
+    to.resize(to.size() + increment);
+    writer.SetOutput(&to[old_size], increment);
+  }
+}
+
+} // namespace
+
+void GZCompress(StringPiece from, std::string &to, int level) {
+  to.clear();
+  GZipWrite writer(level);
+  // TODO: API these to abstract type.
+  writer.SetInput(from.data(), from.size());
+  writer.SetOutput(NULL, 0);
+  while (writer.Stream().avail_in) {
+    EnsureOutput(writer, to);
+    writer.Process();
+  }
+  do {
+    EnsureOutput(writer, to);
+  } while (!writer.Finish());
+  to.resize(reinterpret_cast<const char*>(writer.Stream().next_out) - to.data());
+}
+#else
+void GZCompress(StringPiece &, std::string &, int) {
+  UTIL_THROW("GZip support was not compiled in.");
+}
+#endif
 
 } // namespace util
