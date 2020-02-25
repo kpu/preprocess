@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <iostream>
 
-#include <assert.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
 
 #ifdef HAVE_ZLIB
 #include <zlib.h>
@@ -38,29 +38,21 @@ BZException::~BZException() throw() {}
 XZException::XZException() throw() {}
 XZException::~XZException() throw() {}
 
-class ReadBase {
-  public:
-    virtual ~ReadBase() {}
+void ReadBase::ReplaceThis(ReadBase *with, ReadCompressed &thunk) {
+  thunk.internal_.reset(with);
+}
 
-    virtual std::size_t Read(void *to, std::size_t amount, ReadCompressed &thunk) = 0;
+ReadBase *ReadBase::Current(ReadCompressed &thunk) { return thunk.internal_.get(); }
 
-  protected:
-    static void ReplaceThis(ReadBase *with, ReadCompressed &thunk) {
-      thunk.internal_.reset(with);
-    }
-
-    ReadBase *Current(ReadCompressed &thunk) { return thunk.internal_.get(); }
-
-    static uint64_t &ReadCount(ReadCompressed &thunk) {
-      return thunk.raw_amount_;
-    }
-};
+uint64_t &ReadBase::ReadCount(ReadCompressed &thunk) {
+  return thunk.raw_amount_;
+}
 
 namespace {
 
 ReadBase *ReadFactory(int fd, uint64_t &raw_amount, const void *already_data, std::size_t already_size, bool require_compressed);
 
-// Completed file that other classes can thunk to.  
+// Completed file that other classes can thunk to.
 class Complete : public ReadBase {
   public:
     std::size_t Read(void *, std::size_t, ReadCompressed &) {
@@ -121,7 +113,7 @@ template <class Compression> class StreamCompressed : public ReadBase {
       : file_(fd),
         in_buffer_(MallocOrThrow(kInputBuffer)),
         back_(memcpy(in_buffer_.get(), already_data, already_size), already_size) {}
-    
+
     std::size_t Read(void *to, std::size_t amount, ReadCompressed &thunk) {
       if (amount == 0) return 0;
       back_.SetOutput(to, amount);
@@ -162,8 +154,8 @@ class GZip {
       stream_.zfree = Z_NULL;
       stream_.opaque = Z_NULL;
       stream_.msg = NULL;
-      // 32 for zlib and gzip decoding with automatic header detection.  
-      // 15 for maximum window size.  
+      // 32 for zlib and gzip decoding with automatic header detection.
+      // 15 for maximum window size.
       UTIL_THROW_IF(Z_OK != inflateInit2(&stream_, 32 + 15), GZException, "Failed to initialize zlib.");
     }
 
@@ -374,7 +366,6 @@ ReadBase *ReadFactory(int fd, uint64_t &raw_amount, const void *already_data, co
     header.resize(original + got);
   }
   if (header.empty()) {
-    hold.release();
     return new Complete();
   }
   switch (DetectMagic(&header[0], header.size())) {
@@ -418,8 +409,6 @@ ReadCompressed::ReadCompressed(std::istream &in) {
 
 ReadCompressed::ReadCompressed() {}
 
-ReadCompressed::~ReadCompressed() {}
-
 void ReadCompressed::Reset(int fd) {
   raw_amount_ = 0;
   internal_.reset();
@@ -433,6 +422,17 @@ void ReadCompressed::Reset(std::istream &in) {
 
 std::size_t ReadCompressed::Read(void *to, std::size_t amount) {
   return internal_->Read(to, amount, *this);
+}
+
+std::size_t ReadCompressed::ReadOrEOF(void *const to_in, std::size_t amount) {
+  uint8_t *to = reinterpret_cast<uint8_t*>(to_in);
+  while (amount) {
+    std::size_t got = Read(to, amount);
+    if (!got) break;
+    to += got;
+    amount -= got;
+  }
+  return to - reinterpret_cast<uint8_t*>(to_in);
 }
 
 } // namespace util

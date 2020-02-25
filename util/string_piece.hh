@@ -45,8 +45,8 @@
 // conversions from "const char*" to "string" and back again.
 //
 
-#ifndef BASE_STRING_PIECE_H__
-#define BASE_STRING_PIECE_H__
+#ifndef UTIL_STRING_PIECE_H
+#define UTIL_STRING_PIECE_H
 
 #include "util/have.hh"
 
@@ -85,7 +85,7 @@ inline bool starts_with(const StringPiece& longer, const StringPiece& prefix) {
 #include <algorithm>
 #include <cstddef>
 #include <string>
-#include <string.h>
+#include <cstring>
 
 #ifdef WIN32
 #undef max
@@ -267,4 +267,4 @@ U_NAMESPACE_END
 using U_NAMESPACE_QUALIFIER StringPiece;
 #endif
 
-#endif  // BASE_STRING_PIECE_H__
+#endif  // UTIL_STRING_PIECE_H

@@ -80,7 +80,7 @@ template <class T> class FixedArray {
 #  endif // NDEBUG
     {
       from.newed_end_ = NULL;
-#  ifdef NDEBUG
+#  ifndef NDEBUG
       from.allocated_end_ = NULL;
 #  endif // NDEBUG
     }
