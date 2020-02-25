@@ -1,6 +1,7 @@
 #include "captive_child.hh"
 #include "warc.hh"
 
+#include "util/compress.hh"
 #include "util/fake_ofstream.hh"
 #include "util/file.hh"
 #include "util/fixed_array.hh"
@@ -33,12 +34,21 @@ void InputToProcess(util::PCQueue<std::string> *queue, int process_in) {
 }
 
 // Thread to write from a worker to output.  Steals process_out.
-void OutputFromProcess(int process_out, util::FakeOFStream *out, std::mutex *out_mutex) {
+void OutputFromProcess(bool compress, int process_out, util::FakeOFStream *out, std::mutex *out_mutex) {
   WARCReader reader(process_out);
   std::string str;
-  while (reader.Read(str)) {
-    std::lock_guard<std::mutex> guard(*out_mutex);
-    *out << str;
+  if (compress) {
+    std::string compressed;
+    while (reader.Read(str)) {
+      util::GZCompress(str, compressed);
+      std::lock_guard<std::mutex> guard(*out_mutex);
+      *out << compressed;
+    }
+  } else {
+    while (reader.Read(str)) {
+      std::lock_guard<std::mutex> guard(*out_mutex);
+      *out << str;
+    }
   }
 }
 
@@ -54,11 +64,11 @@ void ReadInput(int from, util::PCQueue<std::string> *queue) {
 // A child process going from WARC to WARC.
 class Worker {
   public:
-    Worker(util::PCQueue<std::string> &in, util::FakeOFStream &out, std::mutex &out_mutex, char *argv[]) {
+    Worker(util::PCQueue<std::string> &in, util::FakeOFStream &out, std::mutex &out_mutex, bool compress, char *argv[]) {
       util::scoped_fd in_file, out_file;
       Launch(argv, in_file, out_file);
       input_ = std::thread(InputToProcess, &in, in_file.release());
-      output_ = std::thread(OutputFromProcess, out_file.release(), &out, &out_mutex);
+      output_ = std::thread(OutputFromProcess, compress, out_file.release(), &out, &out_mutex);
     }
 
     void Join() {
@@ -87,9 +97,9 @@ void ChildReaper(std::size_t expect) {
 
 class WorkerPool {
   public:
-    WorkerPool(std::size_t number, util::FakeOFStream &out, char *argv[]) : in_(number), workers_(number) {
+    WorkerPool(std::size_t number, util::FakeOFStream &out, bool compress, char *argv[]) : in_(number), workers_(number) {
       for (std::size_t i = 0; i < number; ++i) {
-        workers_.push_back(in_, out, out_mutex_, argv);
+        workers_.push_back(in_, out, out_mutex_, compress, argv);
       }
       child_reaper_ = std::thread(ChildReaper, number);
     }
@@ -119,6 +129,7 @@ class WorkerPool {
 struct Options {
   std::vector<std::string> inputs;
   std::size_t workers;
+  bool compress;
 };
 
 void ParseBoostArgs(int restricted_argc, int real_argc, char *argv[], Options &out) {
@@ -127,7 +138,8 @@ void ParseBoostArgs(int restricted_argc, int real_argc, char *argv[], Options &o
   desc.add_options()
     ("help,h", po::bool_switch(), "Show this help message")
     ("inputs,i", po::value(&out.inputs)->multitoken(), "Input files, which will be read in parallel and jumbled together.  Default: read from stdin.")
-    ("jobs,j", po::value(&out.workers)->default_value(std::thread::hardware_concurrency()), "Number of child process workers to use.");
+    ("jobs,j", po::value(&out.workers)->default_value(std::thread::hardware_concurrency()), "Number of child process workers to use.")
+    ("gzip,z", po::bool_switch(&out.compress), "Compress output in gzip format");
   po::variables_map vm;
   po::store(po::command_line_parser(restricted_argc, argv).options(desc).run(), vm);
   if (real_argc == 1 || vm["help"].as<bool>()) {
@@ -181,7 +193,7 @@ char **FindChild(int argc, char *argv[]) {
 void Run(const Options &options, char *child[]) {
   util::FakeOFStream out(1);
 
-  WorkerPool pool(options.workers, out, child);
+  WorkerPool pool(options.workers, out, options.compress, child);
 
   util::FixedArray<std::thread> readers(options.inputs.empty() ? 1 : options.inputs.size());
   if (options.inputs.empty()) {
