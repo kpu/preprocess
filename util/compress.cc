@@ -483,10 +483,10 @@ std::size_t ReadCompressed::ReadOrEOF(void *const to_in, std::size_t amount) {
 namespace {
 
 void EnsureOutput(GZipWrite &writer, std::string &to) {
-  const std::size_t increment = 1024;
+  const std::size_t kIncrement = 4096;
   if (writer.Stream().avail_out < 6 /* magic number in zlib.h to avoid multiple ends */) {
     std::size_t old_done = reinterpret_cast<const char*>(writer.Stream().next_out) - to.data();
-    to.resize(to.size() + increment);
+    to.resize(to.size() + kIncrement);
     writer.SetOutput(&to[old_done], to.size() - old_done);
   }
 }
@@ -495,9 +495,10 @@ void EnsureOutput(GZipWrite &writer, std::string &to) {
 
 void GZCompress(StringPiece from, std::string &to, int level) {
   to.clear();
+  to.resize(4096);
   GZipWrite writer(level);
   writer.SetInput(from.data(), from.size());
-  writer.SetOutput(NULL, 0);
+  writer.SetOutput(&to[0], to.size());
   while (writer.Stream().avail_in) {
     EnsureOutput(writer, to);
     writer.Process();
