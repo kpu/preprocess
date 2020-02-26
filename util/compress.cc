@@ -484,10 +484,10 @@ namespace {
 
 void EnsureOutput(GZipWrite &writer, std::string &to) {
   const std::size_t increment = 1024;
-  if (writer.Stream().avail_out < 6 ) {
-    std::size_t old_size = to.size();
+  if (writer.Stream().avail_out < 6 /* magic number in zlib.h to avoid multiple ends */) {
+    std::size_t old_done = reinterpret_cast<const char*>(writer.Stream().next_out) - to.data();
     to.resize(to.size() + increment);
-    writer.SetOutput(&to[old_size], increment);
+    writer.SetOutput(&to[old_done], to.size() - old_done);
   }
 }
 
@@ -496,7 +496,6 @@ void EnsureOutput(GZipWrite &writer, std::string &to) {
 void GZCompress(StringPiece from, std::string &to, int level) {
   to.clear();
   GZipWrite writer(level);
-  // TODO: API these to abstract type.
   writer.SetInput(from.data(), from.size());
   writer.SetOutput(NULL, 0);
   while (writer.Stream().avail_in) {
