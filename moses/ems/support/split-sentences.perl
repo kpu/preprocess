@@ -89,7 +89,7 @@ if (-e "$prefixfile") {
 my $text = "";
 while (<STDIN>) {
 	chomp;
-	if (/^<.+>$/ || /^\s*$/) {
+	if (/^<p>$/ || /^\s*$/) {
 		# Time to process this block; we've hit a blank or <p>
 		&do_it_for($text, $_);
 		print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
@@ -107,7 +107,7 @@ while (<STDIN>) {
 sub do_it_for {
 	my($text,$markup) = @_;
 	print &preprocess($text) if $text;
-	print "$markup\n" if ($markup =~ /^<.+>$/);
+	print "$markup\n" if ($markup =~ /^<p>$/);
 	#chop($text);
 }
 
