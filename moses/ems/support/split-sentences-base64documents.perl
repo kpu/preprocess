@@ -26,6 +26,7 @@ my $QUIET = 0;
 my $HELP = 0;
 my $LIST_ITEM = 0;
 my $NOP = 0;
+my $KEEP_LINES = 0;
 
 while (@ARGV) {
 	$_ = shift;
@@ -35,6 +36,7 @@ while (@ARGV) {
 	/^-h$/ && ($HELP = 1, next);
 	/^-i$/ && ($LIST_ITEM = 1, next);
 	/^-n$/ && ($NOP = 1, next);
+  /^-k$/ && ($KEEP_LINES = 1, next);
 	/^-b$/ && ($|++, next); # no output buffering
 }
 
@@ -45,6 +47,7 @@ if ($HELP) {
 	print "-p: use a custom prefix file, overriding the installed one\n";
 	print "-i: avoid splitting on list items (e.g. 1. This is the first)\n";
 	print "-n: do not emit <P> after paragraphs\n";
+  print "-k: keep existing line boundaries\n";
 	exit;
 }
 if (!$QUIET) {
@@ -95,7 +98,9 @@ while (<STDIN>) {
   my $text = "";
   while (<DOCUMENT>) {
   	chomp;
-  	if (/^<.+>$/ || /^\s*$/) {
+    if ($KEEP_LINES) {
+      $out .= &do_it_for($_,"");
+    } elsif (/^<.+>$/ || /^\s*$/) {
   		# Time to process this block; we've hit a blank or <p>
   		$out .= &do_it_for($text, $_);
   		$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
