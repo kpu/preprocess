@@ -5,6 +5,7 @@ endif()
 add_library(fields STATIC fields.cc)
 add_library(captive_child STATIC captive_child.cc)
 add_library(warc STATIC warc.cc)
+add_library(base64 STATIC base64.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
