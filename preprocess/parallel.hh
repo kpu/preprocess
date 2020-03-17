@@ -1,7 +1,7 @@
 #ifndef PREPROCESS_PARALLEL__
 #define PREPROCESS_PARALLEL__
 
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 
 #include <iostream>
@@ -13,7 +13,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
   if (argc == 1) {
     StringPiece line;
     util::FilePiece in(0, NULL, &std::cerr);
-    util::FakeOFStream out(1);
+    util::FileStream out(1);
     while (true) {
       try {
         line = in.ReadLine();
@@ -27,7 +27,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
   } else if (argc == 5) {
     StringPiece line0, line1;
     util::FilePiece in0(argv[1], &std::cerr), in1(argv[2]);
-    util::FakeOFStream out0(util::CreateOrThrow(argv[3])), out1(util::CreateOrThrow(argv[4]));
+    util::FileStream out0(util::CreateOrThrow(argv[3])), out1(util::CreateOrThrow(argv[4]));
     while (true) {
       try {
         line0 = in0.ReadLine();

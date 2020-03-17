@@ -4,7 +4,7 @@
 // Removes duplicate lines.
 // Removes any line that contains invalid UTF-8.
 //
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/probing_hash_table.hh"
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
 
     // This is the beginning of a line that delimits documents in the raw files.
     const StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
-    util::FakeOFStream out(1);
+    util::FileStream out(1);
     util::FilePiece in(0, "stdin", &std::cerr);
     while (in.ReadLineOrEOF(l)) {
       l = StripSpaces(l);

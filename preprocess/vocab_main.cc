@@ -1,5 +1,5 @@
 #include "util/file_piece.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/murmur_hash.hh"
 #include "util/probing_hash_table.hh"
 
@@ -29,7 +29,7 @@ int main() {
   util::AutoProbing<Entry, util::IdentityHash> seen;
 
   util::FilePiece in(0, "stdin", &std::cerr);
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
 
   util::AutoProbing<Entry, util::IdentityHash>::MutableIterator it;
   Entry entry;

@@ -2,7 +2,7 @@
 #include "warc.hh"
 
 #include "util/compress.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file.hh"
 #include "util/fixed_array.hh"
 #include "util/pcqueue.hh"
@@ -34,7 +34,7 @@ void InputToProcess(util::PCQueue<std::string> *queue, int process_in) {
 }
 
 // Thread to write from a worker to output.  Steals process_out.
-void OutputFromProcess(bool compress, int process_out, util::FakeOFStream *out, std::mutex *out_mutex) {
+void OutputFromProcess(bool compress, int process_out, util::FileStream *out, std::mutex *out_mutex) {
   WARCReader reader(process_out);
   std::string str;
   if (compress) {
@@ -64,7 +64,7 @@ void ReadInput(int from, util::PCQueue<std::string> *queue) {
 // A child process going from WARC to WARC.
 class Worker {
   public:
-    Worker(util::PCQueue<std::string> &in, util::FakeOFStream &out, std::mutex &out_mutex, bool compress, char *argv[]) {
+    Worker(util::PCQueue<std::string> &in, util::FileStream &out, std::mutex &out_mutex, bool compress, char *argv[]) {
       util::scoped_fd in_file, out_file;
       Launch(argv, in_file, out_file);
       input_ = std::thread(InputToProcess, &in, in_file.release());
@@ -97,7 +97,7 @@ void ChildReaper(std::size_t expect) {
 
 class WorkerPool {
   public:
-    WorkerPool(std::size_t number, util::FakeOFStream &out, bool compress, char *argv[]) : in_(number), workers_(number) {
+    WorkerPool(std::size_t number, util::FileStream &out, bool compress, char *argv[]) : in_(number), workers_(number) {
       for (std::size_t i = 0; i < number; ++i) {
         workers_.push_back(in_, out, out_mutex_, compress, argv);
       }
@@ -193,7 +193,7 @@ char **FindChild(int argc, char *argv[]) {
 }
 
 void Run(const Options &options, char *child[]) {
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
 
   WorkerPool pool(options.workers, out, options.compress, child);
 

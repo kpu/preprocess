@@ -1,4 +1,4 @@
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 
 #include <boost/lexical_cast.hpp>
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   util::FilePiece f(0, NULL, &std::cerr);
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
   try {
     while (true) {
       StringPiece l = f.ReadLine();

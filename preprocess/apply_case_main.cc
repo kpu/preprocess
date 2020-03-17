@@ -1,4 +1,4 @@
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/mutable_vocab.hh"
@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<StringPiece> source_words, target_words;
   std::string lowered;
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
   for (std::size_t line = 0; ; ++line) {
     try {
       SplitLine(source_file, source_words);

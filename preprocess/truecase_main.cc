@@ -1,5 +1,5 @@
 #include "util/file_piece.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/murmur_hash.hh"
 #include "util/pool.hh"
 #include "util/probing_hash_table.hh"
@@ -17,7 +17,7 @@ class Truecase {
     explicit Truecase(const char *file);
 
     // Apply truecasing, using temp as a buffer (to remain const and fast).
-    void Apply(const StringPiece &line, std::string &temp, util::FakeOFStream &out) const;
+    void Apply(const StringPiece &line, std::string &temp, util::FileStream &out) const;
 
   private:
     struct TableEntry {
@@ -96,7 +96,7 @@ Truecase::Truecase(const char *file) {
   }
 }
 
-void Truecase::Apply(const StringPiece &line, std::string &temp, util::FakeOFStream &out) const {
+void Truecase::Apply(const StringPiece &line, std::string &temp, util::FileStream &out) const {
   bool sentence_start = true;
   for (util::TokenIter<util::BoolCharacter, true> word(line, util::kSpaces); word;) {
     const TableEntry *entry;
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   Truecase caser(argv[2]);
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
   StringPiece line;
   std::string temp;
   for (util::FilePiece f(0); f.ReadLineOrEOF(line);) {

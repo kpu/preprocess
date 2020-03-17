@@ -1,5 +1,5 @@
 #include "preprocess/fields.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/pool.hh"
@@ -45,7 +45,7 @@ int main() {
   fields[3].end = preprocess::FieldRange::kInfiniteEnd;
 
   util::Pool string_pool;
-  util::FakeOFStream out(1);
+  util::FileStream out(1);
 
   typedef util::AutoProbing<Entry, util::IdentityHash> Table;
   Table table;

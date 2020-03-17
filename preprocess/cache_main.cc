@@ -1,7 +1,7 @@
 #include "preprocess/captive_child.hh"
 #include "preprocess/fields.hh"
 
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
@@ -49,7 +49,7 @@ private:
 void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
-    util::FakeOFStream process(process_input.get());
+    util::FileStream process(process_input.get());
     std::pair<uint64_t, StringPiece> entry;
     std::size_t flush_count = flush_rate;
     // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
@@ -65,7 +65,7 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
         process << l << '\n';
         // Guarantee we flush to process every so often.
         if (!--flush_count) {
-          process.Flush();
+          process.flush();
           flush_count = flush_rate;
         }
       }
@@ -83,7 +83,7 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
 // Read from queue.  If it's not in the cache, read the result from the captive
 // process.
 void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_output) {
-  util::FakeOFStream out(STDOUT_FILENO);
+  util::FileStream out(STDOUT_FILENO);
   util::FilePiece in(process_output.release());
   // We'll allocate the cached strings into a pool.
   util::Pool string_pool;

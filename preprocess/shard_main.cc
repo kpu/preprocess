@@ -1,5 +1,5 @@
 #include "preprocess/fields.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/fixed_array.hh"
 #include "util/murmur_hash.hh"
@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
 
   util::FilePiece in(0);
   StringPiece line;
-  util::FixedArray<util::FakeOFStream> out(options.outputs.size());
+  util::FixedArray<util::FileStream> out(options.outputs.size());
   std::string output(argv[1]);
   for (const std::string &o : options.outputs) {
     out.push_back(util::CreateOrThrow(o.c_str()));

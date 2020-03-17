@@ -1,5 +1,5 @@
 #include "preprocess/parallel.hh"
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 
 #include <iostream>

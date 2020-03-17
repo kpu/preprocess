@@ -1,4 +1,4 @@
-#include "util/fake_ofstream.hh"
+#include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
 #include "util/mutable_vocab.hh"
@@ -25,7 +25,7 @@ class Recorder {
     }
 
     void Dump() {
-      util::FakeOFStream out(1);
+      util::FileStream out(1);
       for (Map::const_iterator i = map_.begin(); i != map_.end(); ++i) {
         out << boost::lexical_cast<std::string>(i->first);
         for (boost::unordered_map<uint32_t, unsigned int>::const_iterator j = i->second.begin(); j != i->second.end(); ++j) {
