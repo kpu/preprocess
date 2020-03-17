@@ -45,7 +45,7 @@ class FakeOFStream {
     }
 
     FakeOFStream &operator<<(StringPiece str) {
-      if (static_cast<std::size_t>(str.size()) > kOutBuf) {
+      if (static_cast<std::size_t>(str.size()) >= kOutBuf) {
         Flush();
         util::WriteOrThrow(fd_, str.data(), str.size());
       } else {
