@@ -36,7 +36,7 @@ while (@ARGV) {
 	/^-h$/ && ($HELP = 1, next);
 	/^-i$/ && ($LIST_ITEM = 1, next);
 	/^-n$/ && ($NOP = 1, next);
-  /^-k$/ && ($KEEP_LINES = 1, next);
+	/^-k$/ && ($KEEP_LINES = 1, next);
 	/^-b$/ && ($|++, next); # no output buffering
 }
 
@@ -47,7 +47,7 @@ if ($HELP) {
 	print "-p: use a custom prefix file, overriding the installed one\n";
 	print "-i: avoid splitting on list items (e.g. 1. This is the first)\n";
 	print "-n: do not emit <P> after paragraphs\n";
-  print "-k: keep existing line boundaries\n";
+	print "-k: keep existing line boundaries\n";
 	exit;
 }
 if (!$QUIET) {
@@ -120,10 +120,10 @@ while (<STDIN>) {
 
 sub do_it_for {
 	my($text,$markup) = @_;
-  my $ret = "";
+	my $ret = "";
 	$ret .= &preprocess($text) if $text;
 	$ret .= "$markup\n" if ($markup =~ /^<.+>$/);
-  return $ret;
+	return $ret;
 	#chop($text);
 }
 
@@ -157,7 +157,7 @@ sub preprocess {
 	# we include danda and double danda (U+0964 and U+0965) as sentence split characters
 
 	# Non-period end of sentence markers (?!) followed by sentence starters.
-	$text =~ s/([?!\x{0964}\x{0965}]) +([\'\"\(\[\¿\¡\p{IsPi}]*[$sentence_start])/$1\n$2/g;
+	$text =~ s/([?!؟\x{0964}\x{0965}]) +([\'\"\(\[\¿\¡\p{IsPi}]*[$sentence_start])/$1\n$2/g;
 
 	# Multi-dots followed by sentence starters.
 	$text =~ s/(\.[\.]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[$sentence_start])/$1\n$2/g;
@@ -165,11 +165,11 @@ sub preprocess {
 	# Add breaks for sentences that end with some sort of punctuation
 	# inside a quote or parenthetical and are followed by a possible
 	# sentence starter punctuation and upper case.
-	$text =~ s/([?!\.\x{0964}\x{0965}][\ ]*[\x{300d}\x{300f}\'\"\)\]\p{IsPf}]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\ ]*[$sentence_start])/$1\n$2/g;
+	$text =~ s/([?!؟\.\x{0964}\x{0965}][\ ]*[\x{300d}\x{300f}\'\"\)\]\p{IsPf}]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\ ]*[$sentence_start])/$1\n$2/g;
 
 	# Add breaks for sentences that end with some sort of punctuation,
 	# and are followed by a sentence starter punctuation and upper case.
-	$text =~ s/([?!\.\x{0964}\x{0965}]) +([\x{300d}\x{300f}\'\"\(\[\¿\¡\p{IsPi}]+[\ ]*[$sentence_start])/$1\n$2/g;
+	$text =~ s/([?!؟\.\x{0964}\x{0965}]) +([\x{300d}\x{300f}\'\"\(\[\¿\¡\p{IsPi}]+[\ ]*[$sentence_start])/$1\n$2/g;
 
 
 	#NOTE: Korean no longer handled here, cos Korean has spaces.
@@ -179,11 +179,11 @@ sub preprocess {
 		# There does not appear to be any unicode category for full-stops
 		# in general, so list them here.  U+3002 U+FF0E U+FF1F U+FF01
 		#$text =~ s/([。．？！♪])/$1\n/g;
-    	$text =~ s/([\x{3002}\x{ff0e}\x{FF1F}\x{FF01}]+\s*["\x{201d}\x{201e}\x{300d}\x{300f}]?\s*)/$1\n/g;
+		$text =~ s/([\x{3002}\x{ff0e}\x{FF1F}\x{FF01}]+\s*["\x{201d}\x{201e}\x{300d}\x{300f}]?\s*)/$1\n/g;
 
 		# A normal full-stop or other Western sentence enders followed
 		# by an ideograph is an end-of-sentence, always.
-		$text =~ s/([\.?!]) *(\p{CJK})/$1\n$2/g;
+		$text =~ s/([\.?!؟]) *(\p{CJK})/$1\n$2/g;
 
 		# Split close-paren-then-comma into two.
 		$text =~ s/(\p{Punctuation}) *(\p{Punctuation})/ $1 $2 /g;
@@ -195,7 +195,7 @@ sub preprocess {
 		# TODO: perhaps also CJKExtA CJKExtB etc ??? CJK_Radicals_Sup ?
 
 		# bhaddow - Comment this out since it adds white-space between Chinese characters. This is not
-    	# what we want from sentence-splitter!
+		# what we want from sentence-splitter!
 		#$text =~ s/(\p{Punctuation}) *(\p{CJK})/ $1 $2/g;
 		#$text =~ s/(\p{CJK}) *(\p{Punctuation})/$1 $2 /g;
 		#$text =~ s/([\p{CJK}\p{CJKSymbols}])/ $1 /g;
@@ -220,10 +220,10 @@ sub preprocess {
 	my $word;
 	my $i;
 	my @words = split(/\h/,$text);
-    #print "NOW $text\n";
+	#print "NOW $text\n";
 	$text = "";
 	for ($i=0;$i<(scalar(@words)-1);$i++) {
-    #print "Checking $words[$i] $words[$i+1]\n";
+	#print "Checking $words[$i] $words[$i+1]\n";
 		if ($words[$i] =~ /([\p{IsAlnum}\.\-]*)([\'\"\)\]\%\p{IsPf}]*)(\.+)$/) {
 			# Check if $1 is a known honorific and $2 is empty, never break.
 			my $prefix = $1;
