@@ -13,6 +13,8 @@ use warnings;
 use FindBin qw($RealBin);
 use strict;
 use utf8;
+use MIME::Base64;
+use Encode qw(encode);
 
 my $mydir = "$RealBin/../../share/nonbreaking_prefixes";
 
@@ -25,6 +27,7 @@ my $HELP = 0;
 my $LIST_ITEM = 0;
 my $NOP = 0;
 my $KEEP_LINES = 0;
+my $MODE = "singledocument";
 
 while (@ARGV) {
 	$_ = shift;
@@ -36,6 +39,7 @@ while (@ARGV) {
 	/^-n$/ && ($NOP = 1, next);
 	/^-k$/ && ($KEEP_LINES = 1, next);
 	/^-b$/ && ($|++, next); # no output buffering
+	/^-d$/ && ($MODE = "base64documents", next);
 }
 
 if ($HELP) {
@@ -46,6 +50,7 @@ if ($HELP) {
 	print "-i: avoid splitting on list items (e.g. 1. This is the first)\n";
 	print "-n: do not emit <P> after paragraphs\n";
 	print "-k: keep existing line boundaries\n";
+	print "-d: work on multiple base64 encoded documents";
 	exit;
 }
 if (!$QUIET) {
@@ -88,31 +93,69 @@ if (-e "$prefixfile") {
 	close(PREFIX);
 }
 
-## Loop over text, add lines together until we get a blank line or a <p>
-my $text = "";
-while (<STDIN>) {
-	chomp;
-	if ($KEEP_LINES) {
-		&do_it_for($_,"");
-	} elsif (/^<.+>$/ || /^\s*$/) {
-		# Time to process this block; we've hit a blank or <p>
-		&do_it_for($text, $_);
-		print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
-		$text = "";
-	} else {
-		# Append the text, with a space.
-		$text .= $_. " ";
+if ($MODE eq "base64documents") {
+	&do_it_for_base64_encoded_documents();
+} else {
+	&do_it_for_single_document();
+}
+
+sub do_it_for_single_document {
+	## Loop over text, add lines together until we get a blank line or a <p>
+	my $text = "";
+	while (<STDIN>) {
+		chomp;
+		if ($KEEP_LINES) {
+			print &do_it_for($_,"");
+		} elsif (/^<.+>$/ || /^\s*$/) {
+			# Time to process this block; we've hit a blank or <p>
+			print &do_it_for($text, $_);
+			print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
+			$text = "";
+		} else {
+			# Append the text, with a space.
+			$text .= $_. " ";
+		}
+	}
+	# Do the leftover text.
+	print &do_it_for($text,"") if $text;
+}
+
+sub do_it_for_base64_encoded_documents {
+	while (<STDIN>) {
+		my $line = decode_base64($_);
+		open DOCUMENT, '<utf8', \$line or die $!;
+		my $out = "";
+		## Loop over text, add lines together until we get a blank line or a <p>
+		my $text = "";
+		while (<DOCUMENT>) {
+			chomp;
+			if ($KEEP_LINES) {
+				$out .= &do_it_for($_,"");
+			} elsif (/^<.+>$/ || /^\s*$/) {
+				# Time to process this block; we've hit a blank or <p>
+				$out .= &do_it_for($text, $_);
+				$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
+				$text = "";
+			} else {
+				# Append the text, with a space.
+				$text .= $_. " ";
+			}
+		}
+
+		# Do the leftover text.
+		$out .= &do_it_for($text,"") if $text;
+		close(DOCUMENT);
+		print encode_base64(encode("UTF-8", $out), "") . "\n";
 	}
 }
-# Do the leftover text.
-&do_it_for($text,"") if $text;
-
 
 sub do_it_for {
 	my($text,$markup) = @_;
-	print &preprocess($text) if $text;
-	print "$markup\n" if ($markup =~ /^<.+>$/);
+	my $ret = "";
+	$ret .= &preprocess($text) if $text;
+	$ret .= "$markup\n" if ($markup =~ /^<.+>$/);
 	#chop($text);
+	return $ret;
 }
 
 sub preprocess {
