@@ -94,22 +94,33 @@ if (-e "$prefixfile") {
 }
 
 if ($MODE eq "base64documents") {
-	&do_it_for_base64_encoded_documents();
+	while (<STDIN>) {
+		my $line = decode_base64($_);
+		open(my $fh, "<utf8", \$line) or die $!;
+		print encode_base64(encode("UTF-8", &split_single_document($fh)), "") . "\n";
+		close($fh);
+	}
 } else {
-	&do_it_for_single_document();
+	print &split_single_document(*STDIN);
 }
 
-sub do_it_for_single_document {
-	## Loop over text, add lines together until we get a blank line or a <p>
+
+sub split_single_document {
+	# Argument is an open file handle. Lines will be merged unless a line with
+	# just <P> or similar tag or a blank line. Or unless $KEEP_LINES
+	# is True.
+	my ($fh) = @_;
 	my $text = "";
-	while (<STDIN>) {
+	my $out = "";
+	# Loop over text, add lines together until we get a blank line or a <p>
+	while (<$fh>) {
 		chomp;
 		if ($KEEP_LINES) {
-			print &do_it_for($_,"");
+			$out .= &split_block($_,"");
 		} elsif (/^<.+>$/ || /^\s*$/) {
 			# Time to process this block; we've hit a blank or <p>
-			print &do_it_for($text, $_);
-			print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
+			$out .= &split_block($text, $_);
+			$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
 			$text = "";
 		} else {
 			# Append the text, with a space.
@@ -117,39 +128,11 @@ sub do_it_for_single_document {
 		}
 	}
 	# Do the leftover text.
-	print &do_it_for($text,"") if $text;
+	$out .= &split_block($text,"") if $text;
+	return $out;
 }
 
-sub do_it_for_base64_encoded_documents {
-	while (<STDIN>) {
-		my $line = decode_base64($_);
-		open DOCUMENT, '<utf8', \$line or die $!;
-		my $out = "";
-		## Loop over text, add lines together until we get a blank line or a <p>
-		my $text = "";
-		while (<DOCUMENT>) {
-			chomp;
-			if ($KEEP_LINES) {
-				$out .= &do_it_for($_,"");
-			} elsif (/^<.+>$/ || /^\s*$/) {
-				# Time to process this block; we've hit a blank or <p>
-				$out .= &do_it_for($text, $_);
-				$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
-				$text = "";
-			} else {
-				# Append the text, with a space.
-				$text .= $_. " ";
-			}
-		}
-
-		# Do the leftover text.
-		$out .= &do_it_for($text,"") if $text;
-		close(DOCUMENT);
-		print encode_base64(encode("UTF-8", $out), "") . "\n";
-	}
-}
-
-sub do_it_for {
+sub split_block {
 	my($text,$markup) = @_;
 	my $ret = "";
 	$ret .= &preprocess($text) if $text;
