@@ -266,8 +266,9 @@ void HugeRealloc(std::size_t to, bool zero_new, scoped_memory &mem) {
         // main path: try to mremap.
         void *new_addr = mremap(mem.get(), RoundUpSize(mem), to, MREMAP_MAYMOVE);
         if (new_addr != MAP_FAILED) {
-          mem.steal();
-          mem.reset(new_addr, to, mem.source());
+          scoped_memory::Alloc source(mem.source()); // steal resets mem.source()
+          mem.steal(); // let go otherwise reset() will free it first
+          mem.reset(new_addr, to, source);
         } else {
           // Reallocating huge pages can fail with EINVAL.
           // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/mm/mremap.c?id=refs/tags/v3.19#n346
