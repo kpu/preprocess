@@ -87,6 +87,9 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   util::FilePiece in(process_output.release());
   // We'll allocate the cached strings into a pool.
   util::Pool string_pool;
+  // string_pool will return NULL if the first allocation is for empty string.  But we use NULL to indicate a missing value.
+  // This forces the string_pool to always return non-NULL.
+  string_pool.Allocate(1);
   QueueEntry q;
   while (queue.Consume(q).value) {
     StringPiece &value = *q.value;
