@@ -13,6 +13,8 @@ use warnings;
 use FindBin qw($RealBin);
 use strict;
 use utf8;
+use MIME::Base64;
+use Encode qw(encode);
 
 my $mydir = "$RealBin/../../share/nonbreaking_prefixes";
 
@@ -25,6 +27,7 @@ my $HELP = 0;
 my $LIST_ITEM = 0;
 my $NOP = 0;
 my $KEEP_LINES = 0;
+my $MODE = "singledocument";
 
 while (@ARGV) {
 	$_ = shift;
@@ -36,6 +39,7 @@ while (@ARGV) {
 	/^-n$/ && ($NOP = 1, next);
 	/^-k$/ && ($KEEP_LINES = 1, next);
 	/^-b$/ && ($|++, next); # no output buffering
+	/^-d$/ && ($MODE = "base64documents", next);
 }
 
 if ($HELP) {
@@ -46,6 +50,7 @@ if ($HELP) {
 	print "-i: avoid splitting on list items (e.g. 1. This is the first)\n";
 	print "-n: do not emit <P> after paragraphs\n";
 	print "-k: keep existing line boundaries\n";
+	print "-d: work on multiple base64 encoded documents\n";
 	exit;
 }
 if (!$QUIET) {
@@ -88,31 +93,52 @@ if (-e "$prefixfile") {
 	close(PREFIX);
 }
 
-## Loop over text, add lines together until we get a blank line or a <p>
-my $text = "";
-while (<STDIN>) {
-	chomp;
-	if ($KEEP_LINES) {
-		&do_it_for($_,"");
-	} elsif (/^<.+>$/ || /^\s*$/) {
-		# Time to process this block; we've hit a blank or <p>
-		&do_it_for($text, $_);
-		print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
-		$text = "";
-	} else {
-		# Append the text, with a space.
-		$text .= $_. " ";
+if ($MODE eq "base64documents") {
+	while (<STDIN>) {
+		my $line = decode_base64($_);
+		open(my $fh, "<utf8", \$line) or die $!;
+		print encode_base64(encode("UTF-8", &split_single_document($fh)), "") . "\n";
+		close($fh);
 	}
+} else {
+	print &split_single_document(*STDIN);
 }
-# Do the leftover text.
-&do_it_for($text,"") if $text;
 
 
-sub do_it_for {
+sub split_single_document {
+	# Argument is an open file handle. Lines will be merged unless a line with
+	# just <P> or similar tag or a blank line. Or unless $KEEP_LINES
+	# is True.
+	my ($fh) = @_;
+	my $text = "";
+	my $out = "";
+	# Loop over text, add lines together until we get a blank line or a <p>
+	while (<$fh>) {
+		chomp;
+		if ($KEEP_LINES) {
+			$out .= &split_block($_,"");
+		} elsif (/^<.+>$/ || /^\s*$/) {
+			# Time to process this block; we've hit a blank or <p>
+			$out .= &split_block($text, $_);
+			$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
+			$text = "";
+		} else {
+			# Append the text, with a space.
+			$text .= $_. " ";
+		}
+	}
+	# Do the leftover text.
+	$out .= &split_block($text,"") if $text;
+	return $out;
+}
+
+sub split_block {
 	my($text,$markup) = @_;
-	print &preprocess($text) if $text;
-	print "$markup\n" if ($markup =~ /^<.+>$/);
+	my $ret = "";
+	$ret .= &preprocess($text) if $text;
+	$ret .= "$markup\n" if ($markup =~ /^<.+>$/);
 	#chop($text);
+	return $ret;
 }
 
 sub preprocess {
