@@ -36,11 +36,11 @@ foreach(exe ${EXE_LIST})
   set_target_properties(${exe} PROPERTIES FOLDER executables)
 endforeach(exe)
 
+target_link_libraries(b64filter ${PREPROCESS_LIBS} base64 captive_child)
 target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
-target_link_libraries(b64filter base64 captive_child)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)
