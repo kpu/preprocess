@@ -197,6 +197,10 @@ The indexes can be specified as a single index or a range in the form INT-INT.
 You can specify multiple indices or ranges at once. The rest of the arguments
 are interpreted as files to encode/decode.
 
+Indices:
+  N    Single index, starting with 1
+  M-N  Index range, i.e. 1-3 expands to 1 2 3
+
 Arguments:
   -d      Decode mode: convert base64 into plain text. If not specified it will
           default to encode mode.
