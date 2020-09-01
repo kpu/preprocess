@@ -15,6 +15,7 @@ set(EXE_LIST
   commoncrawl_dedupe
   dedupe
   docenc
+  foldfilter
   gigaword_unwrap
   order_independent_hash
   process_unicode
@@ -40,6 +41,7 @@ endforeach(exe)
 target_link_libraries(b64filter ${PREPROCESS_LIBS} base64 captive_child)
 target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(docenc ${PREPROCESS_LIBS} base64)
+target_link_libraries(foldfilter ${PREPROCESS_LIBS} captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
