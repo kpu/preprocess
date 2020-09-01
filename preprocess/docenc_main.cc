@@ -18,8 +18,7 @@ enum Mode {
 	DECOMPRESS
 };
 
-string prefix_lines(string const &input, string const prefix)
-{
+string prefix_lines(string const &input, string const prefix) {
 	stringstream sin(input);
 	stringstream sout;
 
