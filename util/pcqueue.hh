@@ -251,6 +251,13 @@ template <class T> class UnboundedSingleQueue {
       return out;
     }
 
+    // Warning: very much a no-guarantees race-condition-rich implementation!
+    // But sufficient for our specific purpose: The single thread that consumes
+    // is also the only one that checks Empty, and knows that it's racing.
+    bool Empty() const {
+      return reading_current_ == filling_current_;
+    }
+
   private:
     void SetFilling(UnboundedPage<T> *to) {
       filling_ = to;

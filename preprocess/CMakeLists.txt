@@ -10,6 +10,7 @@ add_library(base64 STATIC base64.cc)
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
   apply_case
+  b64filter
   cache
   commoncrawl_dedupe
   dedupe
@@ -39,6 +40,7 @@ target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
+target_link_libraries(b64filter base64 captive_child)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)
