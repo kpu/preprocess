@@ -68,10 +68,13 @@ find_package(Boost 1.41.0 REQUIRED COMPONENTS
   unit_test_framework
 )
 
+find_package(ICU REQUIRED COMPONENTS i18n uc data io)
+
 # Define where include files live
 include_directories(
   ${PROJECT_SOURCE_DIR}
   ${Boost_INCLUDE_DIRS}
+  ${ICU_INCLUDE_DIRS}
 )
 
 # Process subdirectories
