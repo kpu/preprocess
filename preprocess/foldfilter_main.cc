@@ -23,7 +23,7 @@ struct wrap_options {
 
 	// Keep delimiters in the split lines, or separate them out into their own
 	// queue.
-	bool keep_delimiters = true;
+	bool keep_delimiters_in_lines = true;
 
 	// Order determines preference: the first one of these to occur in the
 	// line will determine the wrapping point.
@@ -110,7 +110,7 @@ pair<deque<StringPiece>,deque<string>> wrap_lines(StringPiece const &line, wrap_
 			// When we're not skipping delimiters, don't send more bytes than
 			// column_width in total a single line, even though we try to keep
 			// the delimiters together.
-			if (options.keep_delimiters && pos_cut_end - pos_last_cut >= static_cast<int32_t>(options.column_width))
+			if (options.keep_delimiters_in_lines && pos_cut_end - pos_last_cut >= static_cast<int32_t>(options.column_width))
 				break;
 
 			U8_NEXT(line.data(), pos_next, length, character);
@@ -125,7 +125,7 @@ pair<deque<StringPiece>,deque<string>> wrap_lines(StringPiece const &line, wrap_
 				break;
 		}
 
-		if (options.keep_delimiters) {
+		if (options.keep_delimiters_in_lines) {
 			out_lines.push_back(line.substr(pos_last_cut, pos_cut_end - pos_last_cut));
 			out_delimiters.emplace_back("");
 		} else {
@@ -189,7 +189,7 @@ void parse_options(program_options &options, int argc, char **argv) {
 				continue;
 
 			case 's':
-				options.keep_delimiters = false;
+				options.keep_delimiters_in_lines = false;
 				continue;
 
 			case 'h':
