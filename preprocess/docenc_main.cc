@@ -9,6 +9,7 @@
 #include "util/file_stream.hh"
 #include "util/file_piece.hh"
 #include "util/string_piece.hh"
+#include "util/tokenize_piece.hh"
 #include "preprocess/base64.hh"
 
 
@@ -19,21 +20,14 @@ enum Mode {
 	DECOMPRESS
 };
 
-std::string prefix_lines(std::string const &input, std::string const prefix) {
-	std::stringstream sin(input);
-	std::stringstream sout;
-
-	std::string line;
-	while (getline(sin, line))
-		sout << prefix << line << '\n';
-
-	return sout.str();
+void prefix_lines(std::string const &input, util::FileStream &out, std::string const prefix) {
+	for (util::TokenIter<util::SingleCharacter, false> line_it(input, '\n'); line_it; ++line_it)
+		out << prefix << *line_it << '\n';
 }
 
 size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::vector<size_t> const &indices, bool print_document_index, bool &delimiter_encountered) {
 	size_t document_index = 0;
 	std::vector<size_t>::const_iterator indices_it(indices.begin());
-
 
 	for (StringPiece line : in) {
 		++document_index;
@@ -53,9 +47,11 @@ size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 			delimiter_encountered = true;
 
 		if (print_document_index)
-			document = prefix_lines(document, std::to_string(document_index) + "\t");
+			prefix_lines(document, out, std::to_string(document_index) + "\t");
+		else
+			out << document;
 
-		out << document << delimiter;
+		out << delimiter;
 
 		// Have we found all our indices? Then stop early
 		if (!indices.empty() && indices_it == indices.end())
