@@ -40,20 +40,22 @@ int main(int argc, char **argv) {
 			preprocess::base64_decode(line, doc);
 
 			// Description of the document
-			Document document;
-			document.has_trailing_newline = doc.back() == '\n';
+			Document doc_desc{
+				.line_cnt = 0,
+				.has_trailing_newline = doc.back() == '\n',
+			};
 
 			// Make the the document end with a new line. This to make sure
 			// the next doc we send to the child will be on its own line and the
 			// line_cnt is correct.
-			if (!document.has_trailing_newline)
+			if (!doc_desc.has_trailing_newline)
 				doc.push_back('\n');
 
-			document.line_cnt = count(doc.cbegin(), doc.cend(), '\n');
+			doc_desc.line_cnt = count(doc.cbegin(), doc.cend(), '\n');
 			
 			// Send line count first to the reader, so it can start reading as
 			// soon as we start feeding the document to the child.
-			line_cnt_queue.Produce(document);
+			line_cnt_queue.Produce(std::move(doc_desc));
 
 			// Feed the document to the child.
 			// Might block because it can cause a flush.
