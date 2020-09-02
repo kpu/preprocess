@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
 			// When we're keeping delimiters all of these will be empty strings
 			// but their amount at least will tell the reader thread how many
 			// lines it needs to consume to reconstruct the single line.
-			queue.Produce(delimiters);
+			queue.Produce(std::move(delimiters));
 
 			// Feed the document to the child.
 			// Might block because it can cause a flush.

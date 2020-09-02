@@ -232,14 +232,18 @@ template <class T> class UnboundedSingleQueue {
       SetReading(filling_);
     }
 
-    void Produce(const T &val) {
+    void Produce(T &&val) {
       if (filling_current_ == filling_end_) {
         UnboundedPage<T> *next = new UnboundedPage<T>();
         filling_->next = next;
         SetFilling(next);
       }
-      *(filling_current_++) = val;
+      *(filling_current_++) = std::move(val);
       valid_.post();
+    }
+
+    void Produce(const T &val) {
+      Produce(T(val));
     }
 
     T& Consume(T &out) {
@@ -247,7 +251,7 @@ template <class T> class UnboundedSingleQueue {
       if (reading_current_ == reading_end_) {
         SetReading(reading_->next);
       }
-      out = *(reading_current_++);
+      out = std::move(*(reading_current_++));
       return out;
     }
 
