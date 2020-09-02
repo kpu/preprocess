@@ -12,7 +12,8 @@
 #include "util/utf8.hh"
 #include "preprocess/captive_child.hh"
 
-using namespace std;
+
+namespace {
 
 constexpr size_t not_found = -1;
 
@@ -27,7 +28,7 @@ struct wrap_options {
 
 	// Order determines preference: the first one of these to occur in the
 	// line will determine the wrapping point.
-	vector<UChar32> delimiters{':', ',', ' ', '-', '.', '/'};
+	std::vector<UChar32> delimiters{':', ',', ' ', '-', '.', '/'};
 };
 
 struct program_options : wrap_options {
@@ -36,7 +37,7 @@ struct program_options : wrap_options {
 	char **child_argv = 0;
 };
 
-size_t find_delimiter(vector<UChar32> const &delimiters, UChar32 character) {
+size_t find_delimiter(std::vector<UChar32> const &delimiters, UChar32 character) {
 	for (size_t i = 0; i < delimiters.size(); ++i)
 		if (character == delimiters[i])
 			return i;
@@ -44,10 +45,10 @@ size_t find_delimiter(vector<UChar32> const &delimiters, UChar32 character) {
 	return not_found;
 }
 
-pair<deque<StringPiece>,deque<string>> wrap_lines(StringPiece const &line, wrap_options const &options) {
-	deque<StringPiece> out_lines;
+std::pair<std::deque<StringPiece>,std::deque<std::string>> wrap_lines(StringPiece const &line, wrap_options const &options) {
+	std::deque<StringPiece> out_lines;
 
-	deque<string> out_delimiters;
+	std::deque<std::string> out_delimiters;
 
 	// Current byte position
 	int32_t pos = 0;
@@ -59,7 +60,7 @@ pair<deque<StringPiece>,deque<string>> wrap_lines(StringPiece const &line, wrap_
 	int32_t pos_last_cut = 0;
 
 	// For each delimiter the byte position of its last occurrence
-	vector<int32_t> pos_delimiters(options.delimiters.size(), 0);
+	std::vector<int32_t> pos_delimiters(options.delimiters.size(), 0);
 
 	// Position of the first delimiter we encountered up to pos. Reset
 	// to pos + next char if it's not a delimiter.
@@ -143,11 +144,11 @@ pair<deque<StringPiece>,deque<string>> wrap_lines(StringPiece const &line, wrap_
 		out_delimiters.push_back("");
 	}
 
-	return make_pair(out_lines, out_delimiters);
+	return std::make_pair(out_lines, out_delimiters);
 }
 
 int usage(char **argv) {
-	cerr << "usage: " << argv[0] << " [-w width] [-s] [-h] command [command-args ...]\n"
+	std::cerr << "usage: " << argv[0] << " [-w width] [-s] [-h] command [command-args ...]\n"
 		    "\n"
 		    "Options:\n"
 		    "  -h        Display help\n"
@@ -157,11 +158,11 @@ int usage(char **argv) {
 	return 1;
 }
 
-vector<UChar32> parse_delimiters(char *value) {
+std::vector<UChar32> parse_delimiters(char *value) {
 	int32_t length = strlen(value);
 	int32_t pos = 0;
 	
-	vector<UChar32> delimiters;
+	std::vector<UChar32> delimiters;
 	delimiters.reserve(length);
 
 	while (pos < length) {
@@ -181,7 +182,7 @@ void parse_options(program_options &options, int argc, char **argv) {
 	while (true) {
 		switch(getopt(argc, argv, "+w:d:sh")) {
 			case 'w':
-				options.column_width = atoi(optarg);
+				options.column_width = std::atoi(optarg);
 				continue;
 
 			case 'd':
@@ -195,7 +196,7 @@ void parse_options(program_options &options, int argc, char **argv) {
 			case 'h':
 			case '?':
 			default:
-				exit(usage(argv));
+				std::exit(usage(argv));
 
 			case -1:
 				break;
@@ -204,29 +205,31 @@ void parse_options(program_options &options, int argc, char **argv) {
 	}
 
 	if (optind == argc)
-		exit(usage(argv));
+		std::exit(usage(argv));
 
 	options.child_argv = argv + optind;
 }
+
+} // namespace
 
 int main(int argc, char **argv) {
 	program_options options;
 
 	parse_options(options, argc, argv);
 
-	util::UnboundedSingleQueue<deque<string>> queue;
+	util::UnboundedSingleQueue<std::deque<std::string>> queue;
 
 	util::scoped_fd child_in_fd, child_out_fd;
 
 	pid_t child = preprocess::Launch(options.child_argv, child_in_fd, child_out_fd);
 
-	thread feeder([&child_in_fd, &queue, &options]() {
+	std::thread feeder([&child_in_fd, &queue, &options]() {
 		util::FilePiece in(STDIN_FILENO);
 		util::FileStream child_in(child_in_fd.get());
 
 		for (StringPiece sentence : in) {
-			deque<StringPiece> lines;
-			deque<string> delimiters;
+			std::deque<StringPiece> lines;
+			std::deque<std::string> delimiters;
 
 			// If there is nothing to wrap, it will end up with a single line
 			// and a single empty delimiter.
@@ -245,19 +248,19 @@ int main(int argc, char **argv) {
 		}
 
 		// Tell the reader to stop
-		queue.Produce(deque<string>());
+		queue.Produce({});
 
 		// Flush (blocks) & close the child's stdin
 		child_in.flush();
 		child_in_fd.reset();
 	});
 
-	thread reader([&child_out_fd, &queue, &options]() {
+	std::thread reader([&child_out_fd, &queue, &options]() {
 		util::FileStream out(STDOUT_FILENO);
 		util::FilePiece child_out(child_out_fd.release());
 
-		deque<string> delimiters;
-		string sentence;
+		std::deque<std::string> delimiters;
+		std::string sentence;
 
 		for (size_t sentence_num = 1; queue.Consume(delimiters).size() > 0; ++sentence_num) {
 			sentence.clear();

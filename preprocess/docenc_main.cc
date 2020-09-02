@@ -11,27 +11,28 @@
 #include "util/string_piece.hh"
 #include "preprocess/base64.hh"
 
-using namespace std;
+
+namespace {
 
 enum Mode {
 	COMPRESS,
 	DECOMPRESS
 };
 
-string prefix_lines(string const &input, string const prefix) {
-	stringstream sin(input);
-	stringstream sout;
+std::string prefix_lines(std::string const &input, std::string const prefix) {
+	std::stringstream sin(input);
+	std::stringstream sout;
 
-	string line;
+	std::string line;
 	while (getline(sin, line))
 		sout << prefix << line << '\n';
 
 	return sout.str();
 }
 
-size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, vector<size_t> const &indices, bool print_document_index, bool &delimiter_encountered) {
+size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::vector<size_t> const &indices, bool print_document_index, bool &delimiter_encountered) {
 	size_t document_index = 0;
-	vector<size_t>::const_iterator indices_it(indices.begin());
+	std::vector<size_t>::const_iterator indices_it(indices.begin());
 
 
 	for (StringPiece line : in) {
@@ -45,14 +46,14 @@ size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, vector
 			}
 		}
 
-		string document;
+		std::string document;
 		preprocess::base64_decode(line, document);
 
-		if (!delimiter_encountered && document.find(delimiter == '\n' ? string("\n\n") : string(&delimiter, 1)) != string::npos)
+		if (!delimiter_encountered && document.find(delimiter == '\n' ? std::string("\n\n") : std::string(&delimiter, 1)) != std::string::npos)
 			delimiter_encountered = true;
 
 		if (print_document_index)
-			document = prefix_lines(document, to_string(document_index) + "\t");
+			document = prefix_lines(document, std::to_string(document_index) + "\t");
 
 		out << document << delimiter;
 
@@ -64,10 +65,10 @@ size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, vector
 	return document_index;
 }
 
-size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, vector<size_t> const &indices) {
+size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, std::vector<size_t> const &indices) {
 	size_t document_index = 0;
-	string document;
-	vector<size_t>::const_iterator indices_it(indices.begin());
+	std::string document;
+	std::vector<size_t>::const_iterator indices_it(indices.begin());
 
 	bool is_eof = false;
 	while (!is_eof) {
@@ -114,7 +115,7 @@ size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, vector
 			}
 		}
 
-		string encoded_document;
+		std::string encoded_document;
 		preprocess::base64_encode(StringPiece(document.data(), document.size()), encoded_document);
 		out << encoded_document << '\n';
 	}
@@ -123,7 +124,7 @@ size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, vector
 }
 
 int usage(char program_name[]) {
-	cerr << "Usage: "
+	std::cerr << "Usage: "
 	     << program_name << " [ index ... ] [ files ... ]\n"
 	        "\n"
 	        "Indices:\n"
@@ -139,8 +140,8 @@ int usage(char program_name[]) {
 	return 1;
 }
 
-bool parse_range(const char *arg, vector<size_t> &indices) {
-	stringstream sin(arg);
+bool parse_range(const char *arg, std::vector<size_t> &indices) {
+	std::stringstream sin(arg);
 	
 	// Try to read a number
 	size_t start;
@@ -172,6 +173,8 @@ bool parse_range(const char *arg, vector<size_t> &indices) {
 	return false;
 }
 
+} // namespace
+
 int main(int argc, char **argv) {
 	Mode mode = COMPRESS;
 	uint8_t verbose = 1;
@@ -179,8 +182,8 @@ int main(int argc, char **argv) {
 	char delimiter = '\n'; // default: second newline
 	bool print_document_index = false;
 
-	vector<util::FilePiece> files;
-	vector<size_t> indices;
+	std::vector<util::FilePiece> files;
+	std::vector<std::size_t> indices;
 	
 	try {
 		for (int i = 1; i < argc; ++i) {
@@ -216,14 +219,14 @@ int main(int argc, char **argv) {
 			}
 		}
 	} catch (util::Exception &e) {
-		cerr << e.what();
+		std::cerr << e.what();
 		return usage(argv[0]);
 	}
 
 	if (print_document_index && mode == COMPRESS)
-		cerr << "Warning: printing document numbers (i.e. using -n) won't do anything.\n";
+		std::cerr << "Warning: printing document numbers (i.e. using -n) won't do anything.\n";
 	
-	sort(indices.begin(), indices.end());
+	std::sort(indices.begin(), indices.end());
 
 	// If no files are passed in, read from stdi
 	if (files.empty())
@@ -247,11 +250,11 @@ int main(int argc, char **argv) {
 		}
 
 		if (verbose > 0 && delimiter_encountered)
-			cerr << "Warning: document separator occurs in documents in " << in.FileName() << ".\n";
+			std::cerr << "Warning: document separator occurs in documents in " << in.FileName() << ".\n";
 	}
 
 	if (verbose > 1)
-		cerr << "Processed " << document_count << " documents.\n";
+		std::cerr << "Processed " << document_count << " documents.\n";
 
 	return 0;
 }

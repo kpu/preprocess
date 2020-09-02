@@ -8,36 +8,36 @@
 #include "util/pcqueue.hh"
 
 
-using namespace std;
-using namespace preprocess;
-using util::UnboundedSingleQueue;
+namespace {
 
 struct Document {
 	size_t line_cnt;
 	bool has_trailing_newline;
 };
 
+} // namespace
+
 int main(int argc, char **argv) {
 	if (argc < 2) {
-		cerr << "usage: " << argv[0] << " command [command-args...]\n";
+		std::cerr << "usage: " << argv[0] << " command [command-args...]\n";
 		return 1;
 	}
 
-	UnboundedSingleQueue<Document> line_cnt_queue;
+	util::UnboundedSingleQueue<Document> line_cnt_queue;
 
 	util::scoped_fd child_in_fd, child_out_fd;
 
-	pid_t child = Launch(argv + 1, child_in_fd, child_out_fd);
+	pid_t child = preprocess::Launch(argv + 1, child_in_fd, child_out_fd);
 
-	thread feeder([&child_in_fd, &line_cnt_queue]() {
+	std::thread feeder([&child_in_fd, &line_cnt_queue]() {
 		util::FilePiece in(STDIN_FILENO);
 		util::FileStream child_in(child_in_fd.get());
 
 		// Decoded document buffer
-		string doc;
+		std::string doc;
 
 		for (StringPiece line : in) {
-			base64_decode(line, doc);
+			preprocess::base64_decode(line, doc);
 
 			// Description of the document
 			Document document;
@@ -71,13 +71,13 @@ int main(int argc, char **argv) {
 		child_in_fd.reset();
 	});
 
-	thread reader([&child_out_fd, &line_cnt_queue]() {
+	std::thread reader([&child_out_fd, &line_cnt_queue]() {
 		util::FileStream out(STDOUT_FILENO);
 		util::FilePiece child_out(child_out_fd.release());
 
 		size_t doc_cnt = 0;
 		Document document;
-		string doc;
+		std::string doc;
 
 		while (line_cnt_queue.Consume(document).line_cnt > 0) {
 			++doc_cnt;
@@ -100,8 +100,8 @@ int main(int argc, char **argv) {
 				UTIL_THROW(util::Exception, "Sub-process stopped producing while expecting more lines while processing document " << doc_cnt);
 			}
 
-			string encoded_doc;
-			base64_encode(doc, encoded_doc);
+			std::string encoded_doc;
+			preprocess::base64_encode(doc, encoded_doc);
 			out << encoded_doc << '\n';
 
 			// Just to check, next time we call Consume(), will we block? If so,
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 		}
 	});
 
-	int retval = Wait(child);
+	int retval = preprocess::Wait(child);
 
 	feeder.join();
 	reader.join();
