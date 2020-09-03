@@ -27,24 +27,25 @@ namespace util {
  */
 #ifdef __APPLE__
 
-#define MACH_CALL(call) UTIL_THROW_IF(KERN_SUCCESS != (call), Exception, "Mach call failure")
-
 class Semaphore {
   public:
     explicit Semaphore(int value) : task_(mach_task_self()) {
-      MACH_CALL(semaphore_create(task_, &back_, SYNC_POLICY_FIFO, value));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_create(task_, &back_, SYNC_POLICY_FIFO, value), ErrnoException, "Could not create semaphore");
     }
 
     ~Semaphore() {
-      MACH_CALL(semaphore_destroy(task_, back_));
+      if (KERN_SUCCESS != semaphore_destroy(task_, back_)) {
+        std::cerr << "Could not destroy semaphore" << std::endl;
+        abort();
+      }
     }
 
     void wait() {
-      MACH_CALL(semaphore_wait(back_));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_wait(back_), Exception, "Wait for semaphore failed");
     }
 
     void post() {
-      MACH_CALL(semaphore_signal(back_));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_signal(back_), Exception, "Could not post to semaphore");
     }
 
   private:
