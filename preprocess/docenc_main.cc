@@ -16,14 +16,16 @@
 namespace {
 
 enum Mode {
-	COMPRESS,
-	DECOMPRESS
+	ENCODE,
+	DECODE
 };
+
 
 void prefix_lines(std::string const &input, util::FileStream &out, std::string const prefix) {
 	for (util::TokenIter<util::SingleCharacter, false> line_it(input, '\n'); line_it; ++line_it)
 		out << prefix << *line_it << '\n';
 }
+
 
 size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::vector<size_t> const &indices, bool print_document_index, bool &delimiter_encountered) {
 	size_t document_index = 0;
@@ -61,33 +63,41 @@ size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 	return document_index;
 }
 
+
 size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, std::vector<size_t> const &indices) {
 	size_t document_index = 0;
-	std::string document;
+	
 	std::vector<size_t>::const_iterator indices_it(indices.begin());
 
 	bool is_eof = false;
 	while (!is_eof) {
-		document.clear();
+		std::string document;
 		
 		// Start accumulating lines that make up a document
 		StringPiece line;
 		while (true) {
-			is_eof = !in.ReadLineOrEOF(line, delimiter, true);
-			
-			if (is_eof)
+			// Is this the end of the input? Then stop reading this document and
+			// also stop processing documents in general.
+			if (!in.ReadLineOrEOF(line, delimiter, true)) {
+				is_eof = true;
 				break;
+			}
 
-			// Is this the document delimiter when using \n\n as delimiter?
+			// Is this the document delimiter when using \n\n as delimiter? Stop
+			// reading this document.
 			if (delimiter == '\n' && line.empty())
 				break;
 			
 			document.append(line.data(), line.size());
 			
-			// Add back the \n delimiter for lines
+			// Add back the \n delimiter for lines (they were chopped off by
+			// ReadLineOrEOF)
 			if (delimiter == '\n')
 				document.push_back('\n');
 
+			// If we are not using the double newline as document separator the
+			// ReadLineOrEOF will have consumed a single document in a single
+			// read. So we can stop the loop.
 			if (delimiter != '\n')
 				break;
 		}
@@ -119,22 +129,24 @@ size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 	return document_index;
 }
 
+
 int usage(char program_name[]) {
-	std::cerr << "Usage: "
-	     << program_name << " [ index ... ] [ files ... ]\n"
-	        "\n"
-	        "Indices:\n"
-	        "  N    Single index, starting with 1\n"
-	        "  M-N  Index range, i.e. 1-3 expands to 1 2 3\n"
-	        "\n"
-	        "Options:\n"
-	        "  -d   Decode, i.e. base64 to text (default: encode)\n"
-	        "  -0   Use nullbyte as document delimiter (default: blank line)\n"
-	        "  -q   Do not voice concerns\n"
-	        "  -v   Voice additional info\n"
-	        "  -n   Print document index for each line\n";
+	std::cerr << "Usage: " << program_name << " [ index ... ] [ files ... ]\n"
+		"Convert plain text documents to base64 and vice versa.\n"
+	    "\n"
+	    "Indices:\n"
+	    "  N    Single document index, starting with 1\n"
+	    "  M-N  Index range, i.e. 1-3 expands to 1 2 3\n"
+	    "\n"
+	    "Options:\n"
+	    "  -d   Decode; convert base64 encoded documents to text (default: encode)\n"
+	    "  -0   Use nullbyte as document delimiter (default: blank line)\n"
+	    "  -q   Do not print a warning when the document delimiter shows up\n"
+	    "       inside a document.\n"
+	    "  -n   Prefix each line with the document index\n";
 	return 1;
 }
+
 
 bool parse_range(const char *arg, std::vector<size_t> &indices) {
 	std::stringstream sin(arg);
@@ -171,12 +183,13 @@ bool parse_range(const char *arg, std::vector<size_t> &indices) {
 
 } // namespace
 
-int main(int argc, char **argv) {
-	Mode mode = COMPRESS;
-	uint8_t verbose = 1;
 
+int main(int argc, char **argv) {
+	Mode mode = ENCODE;
+	
 	char delimiter = '\n'; // default: second newline
 	bool print_document_index = false;
+	bool print_warnings = true;
 
 	std::vector<util::FilePiece> files;
 	std::vector<std::size_t> indices;
@@ -186,15 +199,11 @@ int main(int argc, char **argv) {
 			if (argv[i][0] == '-') {
 				switch (argv[i][1]) {
 					case 'd':
-						mode = DECOMPRESS;
-						break;
-
-					case 'v':
-						verbose = 2;
+						mode = DECODE;
 						break;
 
 					case 'q':
-						verbose = 0;
+						print_warnings = false;
 						break;
 
 					case '0':
@@ -219,12 +228,14 @@ int main(int argc, char **argv) {
 		return usage(argv[0]);
 	}
 
-	if (print_document_index && mode == COMPRESS)
-		std::cerr << "Warning: printing document numbers (i.e. using -n) won't do anything.\n";
+	if (print_document_index && mode == ENCODE)
+		std::cerr << "Warning: using -n won't do anything in encode mode.\n";
 	
+	// Sort the indices from small to large so in decode() and encode() we can
+	// more easily check whether the document is in the range.
 	std::sort(indices.begin(), indices.end());
 
-	// If no files are passed in, read from stdi
+	// If no files are passed in, read from stdin
 	if (files.empty())
 		files.emplace_back(STDIN_FILENO);
 
@@ -234,23 +245,20 @@ int main(int argc, char **argv) {
 
 	for (util::FilePiece &in : files) {
 		// Initialize this with true to skip checks altogether
-		bool delimiter_encountered = verbose > 0 ? false : true;
+		bool delimiter_encountered = !print_warnings;
 		
 		switch (mode) {
-			case DECOMPRESS:
+			case DECODE:
 				document_count += decode(in, out, delimiter, indices, print_document_index, delimiter_encountered);
 				break;
-			case COMPRESS:
+			case ENCODE:
 				document_count += encode(in, out, delimiter, indices);
 				break;
 		}
 
-		if (verbose > 0 && delimiter_encountered)
+		if (print_warnings && delimiter_encountered)
 			std::cerr << "Warning: document separator occurs in documents in " << in.FileName() << ".\n";
 	}
-
-	if (verbose > 1)
-		std::cerr << "Processed " << document_count << " documents.\n";
 
 	return 0;
 }
