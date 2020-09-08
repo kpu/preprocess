@@ -105,28 +105,17 @@ int main(int argc, char **argv) {
 			std::string encoded_doc;
 			preprocess::base64_encode(doc, encoded_doc);
 			out << encoded_doc << '\n';
+		}
 
-			// Just to check, next time we call Consume(), will we block? If so,
-			// that means we've caught up with the producer. However, the order
-			// the producer fills line_cnt_queue is first giving us a new line-
-			// count and then sending the input to the sub-process. So if we do
-			// not have a new line count yet, the sub-process definitely can't
-			// have new output yet, and peek should block and once it unblocks
-			// we expect to have that line-count waiting. If we still don't,
-			// then what is this output that is being produced by the sub-
-			// process?
-			if (line_cnt_queue.Empty()) {
-				// If peek throws EOF now our sub-process stopped before its
-				// stdin was closed (producer produces the poison before it
-				// closes the sub-process's stdin.)
-				child_out.peek();
-				
-				// peek() came back. We have a line-number now, right? If not
-				// sub-process is producing output without any input to base it
-				// on. Which is bad.
-				if (line_cnt_queue.Empty())
-					UTIL_THROW(util::Exception, "sub-process is producing more output than it was given input at document " << doc_cnt);
-			}
+		// Assert that we have consumed all the output of the child program.
+		try {
+			// peek() should now fail on an end of file, the loop above should
+			// already have consumed all output that's there.
+			child_out.peek();
+
+			UTIL_THROW(util::Exception, "sub-process is producing more output than it was given input");
+		} catch (util::EndOfFileException &e) {
+			// Good!
 		}
 	});
 
