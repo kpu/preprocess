@@ -27,24 +27,25 @@ namespace util {
  */
 #ifdef __APPLE__
 
-#define MACH_CALL(call) UTIL_THROW_IF(KERN_SUCCESS != (call), Exception, "Mach call failure")
-
 class Semaphore {
   public:
     explicit Semaphore(int value) : task_(mach_task_self()) {
-      MACH_CALL(semaphore_create(task_, &back_, SYNC_POLICY_FIFO, value));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_create(task_, &back_, SYNC_POLICY_FIFO, value), ErrnoException, "Could not create semaphore");
     }
 
     ~Semaphore() {
-      MACH_CALL(semaphore_destroy(task_, back_));
+      if (KERN_SUCCESS != semaphore_destroy(task_, back_)) {
+        std::cerr << "Could not destroy semaphore" << std::endl;
+        abort();
+      }
     }
 
     void wait() {
-      MACH_CALL(semaphore_wait(back_));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_wait(back_), Exception, "Wait for semaphore failed");
     }
 
     void post() {
-      MACH_CALL(semaphore_signal(back_));
+      UTIL_THROW_IF(KERN_SUCCESS != semaphore_signal(back_), Exception, "Could not post to semaphore");
     }
 
   private:
@@ -232,14 +233,18 @@ template <class T> class UnboundedSingleQueue {
       SetReading(filling_);
     }
 
-    void Produce(const T &val) {
+    void Produce(T &&val) {
       if (filling_current_ == filling_end_) {
         UnboundedPage<T> *next = new UnboundedPage<T>();
         filling_->next = next;
         SetFilling(next);
       }
-      *(filling_current_++) = val;
+      *(filling_current_++) = std::move(val);
       valid_.post();
+    }
+
+    void Produce(const T &val) {
+      Produce(T(val));
     }
 
     T& Consume(T &out) {
@@ -247,8 +252,15 @@ template <class T> class UnboundedSingleQueue {
       if (reading_current_ == reading_end_) {
         SetReading(reading_->next);
       }
-      out = *(reading_current_++);
+      out = std::move(*(reading_current_++));
       return out;
+    }
+
+    // Warning: very much a no-guarantees race-condition-rich implementation!
+    // But sufficient for our specific purpose: The single thread that consumes
+    // is also the only one that checks Empty, and knows that it's racing.
+    bool Empty() const {
+      return reading_current_ == filling_current_;
     }
 
   private:

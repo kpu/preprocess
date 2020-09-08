@@ -65,8 +65,6 @@ if (NOT MSVC)
 	set(THREADS pthread)
 endif()
 
-find_package(ICU REQUIRED COMPONENTS i18n uc data io)
-
 # Group these objects together for later use.
 add_library(preprocess_util ${PREPROCESS_UTIL_DOUBLECONVERSION_SOURCE} ${PREPROCESS_UTIL_STREAM_SOURCE} ${PREPROCESS_UTIL_SOURCE})
 target_link_libraries(preprocess_util ${Boost_LIBRARIES} ${COMPRESS_LIBS} ${ICU_LIBRARIES} ${THREADS} ${TIMER_LINK})
