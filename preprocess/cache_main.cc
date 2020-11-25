@@ -104,33 +104,31 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   }
 }
 
-// Parse arguments using boost::program_options
-void ParseArgs(int argc, char *argv[], Options &out) {
-  namespace po = boost::program_options;
-  po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout.");
-  desc.add_options()
-    ("key,k", po::value(&out.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
-    ("field_separator,t", po::value<char>(&out.field_separator)->default_value('\t'), "use a field separator instead of tab");
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-}
-
 int main(int argc, char *argv[]) {
   const std::size_t kFlushRate = 4096;
-  
+
   // Take into account the number of arguments given to `cache` to delete them from the argv provided to Launch function
   Options opt;
   int skip_args = 1;
-  if (!strcmp(argv[1],"-k") || !strcmp(argv[1],"-t") || !strcmp(argv[1],"--key") || !strcmp(argv[1],"--field_separator")){
-    skip_args += 2;
-  }
-  if (argc > 3){
-    if (!strcmp(argv[3],"-k") || !strcmp(argv[3],"-t") || !strcmp(argv[3],"--key") || !strcmp(argv[3],"--field_separator")){
+  for (int arg = 1; arg < argc; arg += 2) {
+    if (!strcmp(argv[arg], "-k") || !strcmp(argv[arg], "-t") || !strcmp(argv[arg], "--key") || !strcmp(argv[arg], "--field_separator")) {
       skip_args += 2;
+    } else {
+      break;
     }
   }
-  ParseArgs(skip_args, argv, opt);
+  namespace po = boost::program_options;
+  po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout. Input lines with the same key will get the same output value without passing them to the underlying program.  These options control what the key is");
+  desc.add_options()
+    ("key,k", po::value(&opt.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
+    ("field_separator,t", po::value<char>(&opt.field_separator)->default_value('\t'), "use a field separator instead of tab");
+  if (argc == 1) {
+    std::cerr << "Usage: " << argv[0] << " [-k 1] [-t ,] cat\n" << desc;
+    return 1;
+  }
+  po::variables_map vm;
+  po::store(po::parse_command_line(skip_args, argv, desc), vm);
+  po::notify(vm);
 
   util::scoped_fd in, out;
   pid_t child = Launch(argv + skip_args, in, out);
