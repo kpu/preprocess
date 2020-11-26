@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
   namespace po = boost::program_options;
   po::options_description desc("Acts as a cache around another program processing one line in, one line out from stdin to stdout. Input lines with the same key will get the same output value without passing them to the underlying program.  These options control what the key is");
   desc.add_options()
-    ("key,k", po::value(&opt.key)->default_value("-1"), "Column(s) key to use as the deduplication string")
+    ("key,k", po::value(&opt.key)->default_value("-"), "Column(s) key to use as the deduplication string")
     ("field_separator,t", po::value<char>(&opt.field_separator)->default_value('\t'), "use a field separator instead of tab");
   if (argc == 1) {
     std::cerr << "Usage: " << argv[0] << " [-k 1] [-t ,] cat\n" << desc;
