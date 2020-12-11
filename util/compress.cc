@@ -509,8 +509,8 @@ void GZCompress(StringPiece from, std::string &to, int level) {
   to.resize(reinterpret_cast<const char*>(writer.Stream().next_out) - to.data());
 }
 #else
-void GZCompress(StringPiece &, std::string &, int) {
-  UTIL_THROW("GZip support was not compiled in.");
+void GZCompress(StringPiece, std::string &, int) {
+  UTIL_THROW(CompressedException, "GZip support was not compiled in.");
 }
 #endif
 
