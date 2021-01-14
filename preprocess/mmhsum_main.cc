@@ -19,8 +19,6 @@ int main(int argc, char *argv[]) {
     size_t count = std::cin.gcount();
     if (!count)
       break;
-    if (std::cin.eof())
-      count -= 1;
     chained_hash = util::MurmurHashNative(buffer, count, chained_hash);
   }
   std::cout << std::hex << chained_hash << '\n';
