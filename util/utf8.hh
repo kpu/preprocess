@@ -61,6 +61,12 @@ class UnsupportedLanguageException : public std::exception {
     std::string what_;
 };
 
+class ICUStupidlyUses32BitIntegersException : public std::exception {
+  public:
+    ~ICUStupidlyUses32BitIntegersException();
+    const char *what() const throw();
+};
+
 bool IsUTF8(const StringPiece &text);
 
 bool IsPunctuation(const StringPiece &text);

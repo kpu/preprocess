@@ -78,6 +78,7 @@ if(BUILD_TESTING)
     compress_test
     string_stream_test
     tokenize_piece_test
+    utf8_test
   )
 
 # Adds a single test to the build, depending on the specified dependent

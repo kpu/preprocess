@@ -11,7 +11,7 @@
 
 #define CHECK_NORMALIZE(ref, from) { \
   std::string out; \
-  utf8::Normalize(from, out); \
+  Normalize(from, out); \
   BOOST_CHECK_EQUAL(ref, out); \
 }
 
@@ -22,7 +22,7 @@
   BOOST_CHECK_EQUAL(ref, out); \
 }
 
-namespace utf8 {
+namespace util {
 namespace {
 
 BOOST_AUTO_TEST_CASE(ASCII) {
@@ -74,6 +74,12 @@ BOOST_AUTO_TEST_CASE(FlattenPossessive) {
   CHECK_FLATTEN("a's ", "a' s ", "en");
   CHECK_FLATTEN("' sfoo", "' sfoo", "en");
   CHECK_FLATTEN("' sfoo ", "' sfoo ", "en");
+}
+
+BOOST_AUTO_TEST_CASE(FailLarge) {
+  StringPiece large(0, 1ULL << 32);
+  std::string out;
+  BOOST_CHECK_THROW(ToLower(large, out), ICUStupidlyUses32BitIntegersException);
 }
 
 } // namespace

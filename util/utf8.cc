@@ -48,23 +48,37 @@ NormalizeException::NormalizeException(const StringPiece &original, UErrorCode c
   what_.append(u_errorName(code));
 }
 
+ICUStupidlyUses32BitIntegersException::~ICUStupidlyUses32BitIntegersException() {}
+const char *ICUStupidlyUses32BitIntegersException::what() const throw() {
+  return "ICU uses int32_t for string sizes but this string was longer than 2^31-1.  TODO: write a loop around it.";
+}
+
+void TODOLoopFor32Bit(const StringPiece &str) {
+  if (str.size() > 2147483647ULL) throw ICUStupidlyUses32BitIntegersException();
+}
+
 bool IsUTF8(const StringPiece &str) {
-  int32_t offset = 0;
-  int32_t length = static_cast<uint32_t>(str.size());
+  size_t offset = 0;
+  size_t length = str.size();
   while (offset < length) {
     UChar32 character;
-    U8_NEXT(str.data(), offset, (int32_t)str.size(), character);
+    /* According to the ICU documentation this is supposed to be int32_t but on
+     * examining the source code
+     * https://unicode-org.github.io/icu-docs/apidoc/dev/icu4c/utf8_8h_source.html#l00352
+     * it can be size_t just fine.
+     */
+    U8_NEXT(str.data(), offset, length, character);
     if (character < 0) return false;
   }
   return true;
 }
 
 bool IsPunctuation(const StringPiece &str) {
-  int32_t offset = 0;
-  int32_t length = static_cast<uint32_t>(str.size());
+  size_t offset = 0;
+  size_t length = str.size();
   while (offset < length) {
     UChar32 character;
-    U8_NEXT(str.data(), offset, (int32_t)str.size(), character);
+    U8_NEXT(str.data(), offset, length, character);
     if (character < 0) {
       throw NotUTF8Exception(str);
     }
@@ -115,6 +129,7 @@ const UCaseMap *GetCaseMap() {
 } // namespace
 
 void ToLower(const StringPiece &in, std::string &out) {
+  TODOLoopFor32Bit(in);
   const UCaseMap *csm = GetCaseMap();
   while (true) {
     UErrorCode err_lower = U_ZERO_ERROR;
@@ -144,7 +159,9 @@ void Normalize(const UnicodeString &in, UnicodeString &out) {
 }
 
 void Normalize(const StringPiece &in, std::string &out) {
-  UnicodeString asuni(UnicodeString::fromUTF8(in));
+  TODOLoopFor32Bit(in);
+  U_ICU_NAMESPACE::StringPiece icupiece(in.data(), in.size());
+  UnicodeString asuni(UnicodeString::fromUTF8(icupiece));
   if (asuni.isBogus()) throw NotUTF8Exception(in);
   UnicodeString normalized;
   Normalize(asuni, normalized);
@@ -357,7 +374,9 @@ void Flatten::Apply(const UnicodeString &in, UnicodeString &out) const {
 }
 
 void Flatten::Apply(const StringPiece &in, std::string &out) const {
-  UnicodeString asuni(UnicodeString::fromUTF8(in));
+  TODOLoopFor32Bit(in);
+  U_ICU_NAMESPACE::StringPiece icupiece(in.data(), in.size());
+  UnicodeString asuni(UnicodeString::fromUTF8(icupiece));
   if (asuni.isBogus()) throw NotUTF8Exception(in);
   UnicodeString normalized;
   Apply(asuni, normalized);
