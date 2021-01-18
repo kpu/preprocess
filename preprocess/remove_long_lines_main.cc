@@ -20,7 +20,7 @@ int main(int argc, char *argv[]) {
   util::FileStream out(1);
   try {
     while (true) {
-      StringPiece l = f.ReadLine();
+      util::StringPiece l = f.ReadLine();
       if (l.size() <= limit) {
         out << l << '\n';
       }

@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-uint64_t Hash(const StringPiece &str) {
+uint64_t Hash(const util::StringPiece &str) {
   return util::MurmurHashNative(str.data(), str.size());
 }
 
@@ -17,7 +17,7 @@ class Truecase {
     explicit Truecase(const char *file);
 
     // Apply truecasing, using temp as a buffer (to remain const and fast).
-    void Apply(const StringPiece &line, std::string &temp, util::FileStream &out) const;
+    void Apply(const util::StringPiece &line, std::string &temp, util::FileStream &out) const;
 
   private:
     struct TableEntry {
@@ -33,7 +33,7 @@ class Truecase {
       bool delayed_sentence_start;
     };
 
-    TableEntry &Insert(StringPiece word) {
+    TableEntry &Insert(util::StringPiece word) {
       TableEntry entry;
       entry.key = Hash(word);
       entry.sentence_end = false;
@@ -50,7 +50,7 @@ class Truecase {
       return *it;
     }
 
-    void InsertFollow(StringPiece word, const char *best, bool known) {
+    void InsertFollow(util::StringPiece word, const char *best, bool known) {
       TableEntry entry;
       entry.key = Hash(word);
       entry.sentence_end = false;
@@ -80,11 +80,11 @@ Truecase::Truecase(const char *file) {
   for (const char *const *i = kDelayedSentenceStart; i != kDelayedSentenceStart + sizeof(kDelayedSentenceStart) / sizeof(const char*); ++i)
     Insert(*i).delayed_sentence_start = true;
 
-  StringPiece word;
+  util::StringPiece word;
   std::string lower;
   for (util::FilePiece f(file); f.ReadWordSameLine(word); f.ReadLine()) {
     const TableEntry &top = Insert(word);
-    utf8::ToLower(word, lower);
+    util::ToLower(word, lower);
     if (word != lower) {
       InsertFollow(lower, top.best, false);
     }
@@ -96,7 +96,7 @@ Truecase::Truecase(const char *file) {
   }
 }
 
-void Truecase::Apply(const StringPiece &line, std::string &temp, util::FileStream &out) const {
+void Truecase::Apply(const util::StringPiece &line, std::string &temp, util::FileStream &out) const {
   bool sentence_start = true;
   for (util::TokenIter<util::BoolCharacter, true> word(line, util::kSpaces); word;) {
     const TableEntry *entry;
@@ -106,8 +106,8 @@ void Truecase::Apply(const StringPiece &line, std::string &temp, util::FileStrea
       out << *word;
     } else {
       try {
-        utf8::ToLower(*word, temp);
-      } catch (const utf8::NotUTF8Exception &e) {
+        util::ToLower(*word, temp);
+      } catch (const util::NotUTF8Exception &e) {
         std::cerr << e.what() << "\nSkipping this word.\n";
         continue;
       }
@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
   }
   Truecase caser(argv[2]);
   util::FileStream out(1);
-  StringPiece line;
+  util::StringPiece line;
   std::string temp;
   for (util::FilePiece f(0); f.ReadLineOrEOF(line);) {
     caser.Apply(line, temp, out);

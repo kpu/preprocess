@@ -1,8 +1,3 @@
-/* If you use ICU in your program, then compile with -DHAVE_ICU -licui18n.  If
- * you don't use ICU, then this will use the Google implementation from Chrome.
- * This has been modified from the original version to let you choose.
- */
-
 // Copyright 2008, Google Inc.
 // All rights reserved.
 //
@@ -54,34 +49,6 @@
 #include <iosfwd>
 #include <ostream>
 
-#ifdef HAVE_ICU
-#include <unicode/stringpiece.h>
-#include <unicode/uversion.h>
-
-// Old versions of ICU don't define operator== and operator!=.
-#if (U_ICU_VERSION_MAJOR_NUM < 4) || ((U_ICU_VERSION_MAJOR_NUM == 4) && (U_ICU_VERSION_MINOR_NUM < 4))
-#warning You are using an old version of ICU.  Consider upgrading to ICU >= 4.6.
-inline bool operator==(const StringPiece& x, const StringPiece& y) {
-  if (x.size() != y.size())
-    return false;
-
-  return std::memcmp(x.data(), y.data(), x.size()) == 0;
-}
-
-inline bool operator!=(const StringPiece& x, const StringPiece& y) {
-  return !(x == y);
-}
-#endif // old version of ICU
-
-U_NAMESPACE_BEGIN
-
-inline bool starts_with(const StringPiece& longer, const StringPiece& prefix) {
-  int longersize = longer.size(), prefixsize = prefix.size();
-  return longersize >= prefixsize && std::memcmp(longer.data(), prefix.data(), prefixsize) == 0;
-}
-
-#else
-
 #include <algorithm>
 #include <cstddef>
 #include <string>
@@ -91,6 +58,8 @@ inline bool starts_with(const StringPiece& longer, const StringPiece& prefix) {
 #undef max
 #undef min
 #endif
+
+namespace util {
 
 class StringPiece {
  public:
@@ -237,8 +206,6 @@ inline bool starts_with(const StringPiece& longer, const StringPiece& prefix) {
   return longer.starts_with(prefix);
 }
 
-#endif // HAVE_ICU undefined
-
 inline bool operator<(const StringPiece& x, const StringPiece& y) {
   const int r = std::memcmp(x.data(), y.data(),
                                        std::min(x.size(), y.size()));
@@ -262,9 +229,6 @@ inline std::ostream& operator<<(std::ostream& o, const StringPiece& piece) {
   return o.write(piece.data(), static_cast<std::streamsize>(piece.size()));
 }
 
-#ifdef HAVE_ICU
-U_NAMESPACE_END
-using U_NAMESPACE_QUALIFIER StringPiece;
-#endif
+} // namespace util
 
 #endif  // UTIL_STRING_PIECE_H

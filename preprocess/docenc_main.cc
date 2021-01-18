@@ -31,7 +31,7 @@ size_t decode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 	size_t document_index = 0;
 	std::vector<size_t>::const_iterator indices_it(indices.begin());
 
-	for (StringPiece line : in) {
+	for (util::StringPiece line : in) {
 		++document_index;
 
 		if (!indices.empty()) {
@@ -74,7 +74,7 @@ size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 		std::string document;
 		
 		// Start accumulating lines that make up a document
-		StringPiece line;
+    util::StringPiece line;
 		while (true) {
 			// Is this the end of the input? Then stop reading this document and
 			// also stop processing documents in general.
@@ -122,7 +122,7 @@ size_t encode(util::FilePiece &in, util::FileStream &out, char delimiter, std::v
 		}
 
 		std::string encoded_document;
-		preprocess::base64_encode(StringPiece(document.data(), document.size()), encoded_document);
+		preprocess::base64_encode(util::StringPiece(document.data(), document.size()), encoded_document);
 		out << encoded_document << '\n';
 	}
 

@@ -45,8 +45,8 @@ size_t find_delimiter(std::vector<UChar32> const &delimiters, UChar32 character)
 	return not_found;
 }
 
-std::pair<std::deque<StringPiece>,std::deque<std::string>> wrap_lines(StringPiece const &line, wrap_options const &options) {
-	std::deque<StringPiece> out_lines;
+std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util::StringPiece const &line, wrap_options const &options) {
+	std::deque<util::StringPiece> out_lines;
 
 	std::deque<std::string> out_delimiters;
 
@@ -72,7 +72,7 @@ std::pair<std::deque<StringPiece>,std::deque<std::string>> wrap_lines(StringPiec
 		U8_NEXT(line.data(), pos, length, character);
 		
 		if (character < 0)
-			throw utf8::NotUTF8Exception(line);
+			throw util::NotUTF8Exception(line);
 
 		size_t delimiter_idx = find_delimiter(options.delimiters, character);
 
@@ -117,7 +117,7 @@ std::pair<std::deque<StringPiece>,std::deque<std::string>> wrap_lines(StringPiec
 			U8_NEXT(line.data(), pos_next, length, character);
 
 			if (character < 0)
-				throw utf8::NotUTF8Exception(line);
+				throw util::NotUTF8Exception(line);
 
 			// First character after pos_cut is probably a delimiter, unless
 			// we did a hard stop in the middle of a word, and we're not keeping
@@ -170,7 +170,7 @@ std::vector<UChar32> parse_delimiters(char *value) {
 		U8_NEXT(value, pos, length, delimiter);
 		
 		if (delimiter < 0)
-			throw utf8::NotUTF8Exception(value);
+			throw util::NotUTF8Exception(value);
 		
 		delimiters.push_back(delimiter);
 	}
@@ -227,8 +227,8 @@ int main(int argc, char **argv) {
 		util::FilePiece in(STDIN_FILENO);
 		util::FileStream child_in(child_in_fd.get());
 
-		for (StringPiece sentence : in) {
-			std::deque<StringPiece> lines;
+		for (util::StringPiece sentence : in) {
+			std::deque<util::StringPiece> lines;
 			std::deque<std::string> delimiters;
 
 			// If there is nothing to wrap, it will end up with a single line
@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
 
 			try {
 				while (!delimiters.empty()) {
-					StringPiece line(child_out.ReadLine());
+					util::StringPiece line(child_out.ReadLine());
 					sentence.append(line.data(), line.length());
 					sentence.append(delimiters.front());
 					delimiters.pop_front();

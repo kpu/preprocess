@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <climits>
 
-#ifndef HAVE_ICU
+namespace util {
 
 typedef StringPiece::size_type size_type;
 
@@ -189,4 +189,4 @@ StringPiece StringPiece::substr(size_type pos, size_type n) const {
 
 const size_type StringPiece::npos = size_type(-1);
 
-#endif // !HAVE_ICU
+} // namespace util

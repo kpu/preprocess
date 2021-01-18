@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
   uint64_t shard_count = options.outputs.size();
 
   util::FilePiece in(0);
-  StringPiece line;
+  util::StringPiece line;
   util::FixedArray<util::FileStream> out(options.outputs.size());
   std::string output(argv[1]);
   for (const std::string &o : options.outputs) {

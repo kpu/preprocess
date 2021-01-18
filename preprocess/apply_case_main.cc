@@ -10,7 +10,7 @@
 #include <boost/unordered_map.hpp>
 
 namespace {
-void SplitLine(util::FilePiece &from, std::vector<StringPiece> &to) {
+void SplitLine(util::FilePiece &from, std::vector<util::StringPiece> &to) {
   to.clear();
   for (util::TokenIter<util::SingleCharacter, true> i(from.ReadLine(), ' '); i; ++i) {
     to.push_back(*i);
@@ -49,10 +49,10 @@ int main(int argc, char *argv[]) {
       key = model.ReadULong();
     } catch (const util::EndOfFileException &e) { break; }
     uint64_t max_count = 0;
-    StringPiece best_word;
+    util::StringPiece best_word;
     for (util::TokenIter<util::SingleCharacter, true> pair(model.ReadLine(), '\t'); pair; ++pair) {
       util::TokenIter<util::SingleCharacter> spaces(*pair, ' ');
-      StringPiece word(*spaces);
+      util::StringPiece word(*spaces);
       uint64_t count = boost::lexical_cast<uint64_t>(*++spaces);
       if (count > max_count) {
         max_count = count;
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 
   std::cerr << "Read model." << std::endl;
 
-  std::vector<StringPiece> source_words, target_words;
+  std::vector<util::StringPiece> source_words, target_words;
   std::string lowered;
   util::FileStream out(1);
   for (std::size_t line = 0; ; ++line) {
@@ -81,15 +81,15 @@ int main(int argc, char *argv[]) {
       unsigned long second = align.ReadULong();
       UTIL_THROW_IF2(first >= source_words.size(), "Index " << first << " too high for source text at line " << line << " which has size " << source_words.size());
       UTIL_THROW_IF2(second >= target_words.size(), "Index " << second << " too high for target text at line " << line << " which has size " << target_words.size());
-      utf8::ToLower(target_words[second], lowered);
-      StringPiece source(source_words[first]);
+      util::ToLower(target_words[second], lowered);
+      util::StringPiece source(source_words[first]);
       uint64_t key = util::MurmurHash64A(lowered.data(), lowered.size(), util::MurmurHash64A(source.data(), source.size()));
       boost::unordered_map<uint64_t, uint32_t>::const_iterator found = best.find(key);
       if (found != best.end()) {
         target_words[second] = vocab.String(found->second);
       }
     }
-    std::vector<StringPiece>::const_iterator i = target_words.begin();
+    std::vector<util::StringPiece>::const_iterator i = target_words.begin();
     if (i != target_words.end()) out << *i;
     for (++i; i != target_words.end(); ++i) {
       out << ' ' << *i;

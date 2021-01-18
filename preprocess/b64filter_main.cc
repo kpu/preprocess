@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 		// Decoded document buffer
 		std::string doc;
 
-		for (StringPiece line : in) {
+		for (util::StringPiece line : in) {
 			preprocess::base64_decode(line, doc);
 
 			// Description of the document
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
 			try {
 				while (document.line_cnt-- > 0) {
-					StringPiece line(child_out.ReadLine());
+        util::StringPiece line(child_out.ReadLine());
 					doc.append(line.data(), line.length());
 
 					// ReadLine eats line endings. Between lines we definitely

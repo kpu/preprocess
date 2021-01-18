@@ -28,7 +28,7 @@ struct Entry {
 typedef util::AutoProbing<Entry, util::IdentityHash> Table;
 
 // Use 64-bit MurmurHash in the hash table.  
-bool IsNewLine(Table &table, StringPiece l) {
+bool IsNewLine(Table &table, util::StringPiece l) {
   Table::MutableIterator it;
   Entry entry;
   entry.key = util::MurmurHashNative(l.data(), l.size(), 1);
@@ -36,12 +36,12 @@ bool IsNewLine(Table &table, StringPiece l) {
 }
 
 // Remove leading and trailing space characters.
-StringPiece StripSpaces(StringPiece ret) {
+util::StringPiece StripSpaces(util::StringPiece ret) {
   while (ret.size() && util::kSpaces[static_cast<unsigned char>(*ret.data())]) {
-    ret = StringPiece(ret.data() + 1, ret.size() - 1);
+    ret = util::StringPiece(ret.data() + 1, ret.size() - 1);
   }
   while (ret.size() && util::kSpaces[static_cast<unsigned char>(ret.data()[ret.size() - 1])]) {
-    ret = StringPiece(ret.data(), ret.size() - 1);
+    ret = util::StringPiece(ret.data(), ret.size() - 1);
   }
   return ret;
 }
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
   }
   try {
     Table table;
-    StringPiece l;
+    util::StringPiece l;
 
     // If there's a file to remove lines from, add it to the hash table of lines.
     if (argc == 2) {
@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
     }
 
     // This is the beginning of a line that delimits documents in the raw files.
-    const StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
+    const util::StringPiece remove_line("df6fa1abb58549287111ba8d776733e9");
     util::FileStream out(1);
     util::FilePiece in(0, "stdin", &std::cerr);
     while (in.ReadLineOrEOF(l)) {
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
       // It does not begin with the magic document delimiter.
       // Its 64-bit hash has not been seen before.
       // and it is valid UTF-8.
-      if (!starts_with(l, remove_line) && IsNewLine(table, l) && utf8::IsUTF8(l)) {
+      if (!starts_with(l, remove_line) && IsNewLine(table, l) && util::IsUTF8(l)) {
         out << l << '\n';
       }
     }

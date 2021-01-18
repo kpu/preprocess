@@ -7,17 +7,11 @@
 #include <boost/functional/hash.hpp>
 #include <boost/version.hpp>
 
-#ifdef HAVE_ICU
-U_NAMESPACE_BEGIN
-#endif
+namespace util {
 
 inline size_t hash_value(const StringPiece &str) {
   return boost::hash_range(str.data(), str.data() + str.length());
 }
-
-#ifdef HAVE_ICU
-U_NAMESPACE_END
-#endif
 
 /* Support for lookup of StringPiece in boost::unordered_map<std::string> */
 struct StringPieceCompatibleHash : public std::unary_function<const StringPiece &, size_t> {
@@ -48,5 +42,7 @@ template <class T> typename T::iterator FindStringPiece(T &t, const StringPiece 
   return t.find(key, StringPieceCompatibleHash(), StringPieceCompatibleEquals());
 #endif
 }
+
+} // namespace util
 
 #endif // UTIL_STRING_PIECE_HASH_H

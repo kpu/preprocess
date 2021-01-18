@@ -37,7 +37,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 int main(int argc, char *argv[]) {
   Options opt;
   ParseArgs(argc, argv, opt);
-  utf8::Flatten flatten(opt.language);
+  util::Flatten flatten(opt.language);
   std::string line, normalized;
   UnicodeString str[2];
   UnicodeString *cur = &str[0], *tmp = &str[1];
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
       std::swap(cur, tmp);
     }
     if (opt.normalize) {
-      utf8::Normalize(*cur, *tmp);
+      util::Normalize(*cur, *tmp);
       std::swap(cur, tmp);
     }
     std::cout << *str << '\n';

@@ -16,7 +16,7 @@ struct Entry {
 
 class Dedupe {
   public:
-    bool operator()(const StringPiece &line) {
+    bool operator()(const util::StringPiece &line) {
       Entry entry;
       entry.key = util::MurmurHashNative(line.data(), line.size()) + 1;
       Table::MutableIterator it;

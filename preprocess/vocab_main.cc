@@ -35,7 +35,7 @@ int main() {
   Entry entry;
 
   try { while (true) {
-    StringPiece word = in.ReadDelimited(delimiters);
+    util::StringPiece word = in.ReadDelimited(delimiters);
     entry.SetKey(util::MurmurHashNative(word.data(), word.size()));
     if (!seen.FindOrInsert(entry, it)) {
       out << word << '\0';

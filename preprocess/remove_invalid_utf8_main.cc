@@ -5,9 +5,9 @@
 int main() {
   util::FilePiece in(0);
   util::FileStream out(1);
-  StringPiece line;
+  util::StringPiece line;
   while (in.ReadLineOrEOF(line)) {
-    if (utf8::IsUTF8(line)) {
+    if (util::IsUTF8(line)) {
       out << line << '\n';
     }
   }

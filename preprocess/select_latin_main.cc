@@ -11,7 +11,7 @@
 #include <unicode/uscript.h>
 
 struct SelectLatin {
-  bool operator()(const StringPiece &line) const {
+  bool operator()(const util::StringPiece &line) const {
     int32_t offset = 0;
     int32_t length = static_cast<int32_t>(line.size());
     size_t counts[USCRIPT_CODE_LIMIT];

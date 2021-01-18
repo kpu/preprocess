@@ -11,7 +11,7 @@
 template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
   uint64_t input = 0, output = 0;
   if (argc == 1) {
-    StringPiece line;
+    util::StringPiece line;
     util::FilePiece in(0, NULL, &std::cerr);
     util::FileStream out(1);
     while (true) {
@@ -25,7 +25,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
       }
     }
   } else if (argc == 5) {
-    StringPiece line0, line1;
+    util::StringPiece line0, line1;
     util::FilePiece in0(argv[1], &std::cerr), in1(argv[2]);
     util::FileStream out0(util::CreateOrThrow(argv[3])), out1(util::CreateOrThrow(argv[4]));
     while (true) {

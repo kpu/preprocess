@@ -25,7 +25,7 @@
 
 using U_ICU_NAMESPACE::UnicodeString;
 
-namespace utf8 {
+namespace util {
 
 // Could be more efficient, but I'm not terribly worried about that.
 NotUTF8Exception::NotUTF8Exception(const StringPiece &original) throw()
@@ -365,4 +365,4 @@ void Flatten::Apply(const StringPiece &in, std::string &out) const {
   normalized.toUTF8String(out);
 }
 
-} // namespace utf8
+} // namespace util

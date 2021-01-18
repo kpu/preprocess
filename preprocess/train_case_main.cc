@@ -9,7 +9,7 @@
 #include <boost/unordered_map.hpp>
 
 namespace {
-void SplitLine(util::FilePiece &from, std::vector<StringPiece> &to) {
+void SplitLine(util::FilePiece &from, std::vector<util::StringPiece> &to) {
   to.clear();
   for (util::TokenIter<util::SingleCharacter, true> i(from.ReadLine(), ' '); i; ++i) {
     to.push_back(*i);
@@ -18,8 +18,8 @@ void SplitLine(util::FilePiece &from, std::vector<StringPiece> &to) {
 
 class Recorder {
   public:
-    void Add(StringPiece source, StringPiece target) {
-      utf8::ToLower(target, lowered_);
+    void Add(util::StringPiece source, util::StringPiece target) {
+      util::ToLower(target, lowered_);
       uint64_t key = util::MurmurHash64A(lowered_.data(), lowered_.size(), util::MurmurHash64A(source.data(), source.size()));
       ++map_[key][vocab_.FindOrInsert(target)];
     }
@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   util::FilePiece align(argv[1], &std::cerr), source_file(argv[2]), target_file(argv[3]);
-  std::vector<StringPiece> source_words, target_words;
+  std::vector<util::StringPiece> source_words, target_words;
   Recorder recorder;
   std::size_t sentence = 0, discarded = 0;
   for (; ; ++sentence) {
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
     align.ReadLine(); // comment line ending
 
     align.ReadLine(); // uncased sentence
-    StringPiece word(align.ReadDelimited());
+    util::StringPiece word(align.ReadDelimited());
     UTIL_THROW_IF2("NULL" != word, "Expected NULL at the beginning, not " << word);
 
     if (from_length != source_words.size() || to_length != target_words.size()) {

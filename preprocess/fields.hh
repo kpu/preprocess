@@ -26,7 +26,7 @@ void ParseFields(const char *arg, std::vector<FieldRange> &indices);
 void DefragmentFields(std::vector<FieldRange> &indices);
 
 // Do a callback with each individual field that was selected.
-template <class Functor> inline void IndividualFields(StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
+template <class Functor> inline void IndividualFields(util::StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
   const char *begin = str.data();
   const char *const end = str.data() + str.size();
   unsigned int index = 0;
@@ -37,7 +37,7 @@ template <class Functor> inline void IndividualFields(StringPiece str, const std
     }
     for (; index < f.end; ++index) {
       const char *found = std::find(begin, end, delim);
-      callback(StringPiece(begin, found - begin));
+      callback(util::StringPiece(begin, found - begin));
       begin = found + 1;
       if (begin >= end) return;
     }
@@ -46,7 +46,7 @@ template <class Functor> inline void IndividualFields(StringPiece str, const std
 }
 
 // Do a callback with ranges of fields.
-template <class Functor> inline void RangeFields(StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
+template <class Functor> inline void RangeFields(util::StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
   const char *begin = str.data();
   const char *const end = str.data() + str.size();
   unsigned int index = 0;
@@ -56,7 +56,7 @@ template <class Functor> inline void RangeFields(StringPiece str, const std::vec
       if (begin >= end) return;
     }
     if (f.end == FieldRange::kInfiniteEnd) {
-      callback(StringPiece(begin, end - begin));
+      callback(util::StringPiece(begin, end - begin));
       return;
     }
     const char *old_begin = begin;
@@ -64,11 +64,11 @@ template <class Functor> inline void RangeFields(StringPiece str, const std::vec
       const char *found = std::find(begin, end, delim);
       begin = found + 1;
       if (begin >= end) {
-        callback(StringPiece(old_begin, end - old_begin));
+        callback(util::StringPiece(old_begin, end - old_begin));
         return;
       }
     }
-    callback(StringPiece(old_begin, begin - old_begin - 1));
+    callback(util::StringPiece(old_begin, begin - old_begin - 1));
   }
   return;
 }
@@ -78,7 +78,7 @@ class HashCallback {
   public:
     explicit HashCallback(uint64_t seed = 47849374332489ULL) : hash_(seed) /* Be different from deduper */ {}
 
-    void operator()(StringPiece key) {
+    void operator()(util::StringPiece key) {
       hash_ = util::MurmurHashNative(key.data(), key.size(), hash_);
     }
 

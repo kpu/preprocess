@@ -96,7 +96,7 @@ const char *nyt_parentheses[] = {
   "(STORY CAN END HERE. OPTIONAL 3RD TAKE FOLLOWS.)"
 };
 
-boost::unordered_map<StringPiece, const char *> nyt_parentheses_set;
+boost::unordered_map<util::StringPiece, const char *> nyt_parentheses_set;
 
 void CheckReplaceEntity(std::string &line, size_t pos, const char *pattern, char with) {
   if (!strncasecmp(line.c_str() + pos, pattern, strlen(pattern))) {
@@ -105,14 +105,14 @@ void CheckReplaceEntity(std::string &line, size_t pos, const char *pattern, char
 }
 
 void MungeLine(std::string &line) {
-  boost::unordered_map<StringPiece, const char *>::const_iterator found;
+  boost::unordered_map<util::StringPiece, const char *>::const_iterator found;
   // Parenthesized stuff
   for (size_t pos = line.find('('); pos != std::string::npos;) {
     size_t right = line.find(')', pos + 1);
     if (right != std::string::npos) {
       // Include ')' in range [pos, end)
       size_t end = right + 1;
-      if (nyt_parentheses_set.end() != (found = nyt_parentheses_set.find(StringPiece(line.c_str() + pos, end - pos)))) {
+      if (nyt_parentheses_set.end() != (found = nyt_parentheses_set.find(util::StringPiece(line.c_str() + pos, end - pos)))) {
         line.replace(pos, end - pos, found->second);
         pos = line.find('(', pos);
       } else if(!strncmp(line.c_str() + pos + 1, "BC-", 3)) {
@@ -151,7 +151,7 @@ void MungeLine(std::string &line) {
 void ProcessText(util::FilePiece &in, const std::string &close, std::ostream &out, std::string &dupe_detect) {
   bool content = false;
   std::string line;
-  StringPiece l;
+  util::StringPiece l;
   while (true) {
     try {
       l = in.ReadLine();
@@ -176,7 +176,7 @@ void ProcessText(util::FilePiece &in, const std::string &close, std::ostream &ou
 
 void ProcessGigaword(util::FilePiece &in, std::ostream &out) {
   const std::string head_close("</HEADLINE>"), p_close("</P>"), date_close("</DATELINE>"), text_close("</TEXT>");
-  StringPiece line;
+  util::StringPiece line;
   std::string dupe_detect;
   while (true) {
     try {

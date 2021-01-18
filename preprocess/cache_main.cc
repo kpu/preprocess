@@ -33,32 +33,32 @@ struct Options {
 struct QueueEntry {
   // NULL pointer is poison.
   // value->data() == NULL means uninitialized
-  StringPiece *value;
+  util::StringPiece *value;
 };
 
 struct HashWithSeed {
   HashWithSeed() { hash = 0; }
-  void operator()(StringPiece sp) { size_t result = util::MurmurHashNative(sp.data(), sp.size(), hash); hash = result; }
+  void operator()(util::StringPiece sp) { size_t result = util::MurmurHashNative(sp.data(), sp.size(), hash); hash = result; }
   size_t get_hash() { return hash; }
 
 private:
   size_t hash;
 };
 
-void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, StringPiece> &cache, std::size_t flush_rate, Options &options) {
+void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, util::StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
     util::FileStream process(process_input.get());
-    std::pair<uint64_t, StringPiece> entry;
+    std::pair<uint64_t, util::StringPiece> entry;
     std::size_t flush_count = flush_rate;
     // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
     std::vector<FieldRange> indices;
     ParseFields(options.key.c_str(), indices);
-    for (StringPiece l : util::FilePiece(STDIN_FILENO)) {
+    for (util::StringPiece l : util::FilePiece(STDIN_FILENO)) {
       HashWithSeed callback= HashWithSeed();
       RangeFields(l, indices, options.field_separator, callback);
       entry.first = callback.get_hash();
-      std::pair<std::unordered_map<uint64_t, StringPiece>::iterator, bool> res(cache.insert(entry));
+      std::pair<std::unordered_map<uint64_t, util::StringPiece>::iterator, bool> res(cache.insert(entry));
       if (res.second) {
         // New entry.  Send to captive process.
         process << l << '\n';
@@ -91,14 +91,14 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   string_pool.Allocate(1);
   QueueEntry q;
   while (queue.Consume(q).value) {
-    StringPiece &value = *q.value;
+    util::StringPiece &value = *q.value;
     if (!value.data()) {
       // New entry, not cached.
-      StringPiece got = in.ReadLine();
+      util::StringPiece got = in.ReadLine();
       // Allocate memory to store a copy of the line.
       char *copy_to = (char*)string_pool.Allocate(got.size());
       memcpy(copy_to, got.data(), got.size());
-      value = StringPiece(copy_to, got.size());
+      value = util::StringPiece(copy_to, got.size());
     }
     out << value << '\n';
   }
@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
   pid_t child = Launch(argv + skip_args, in, out);
   util::UnboundedSingleQueue<QueueEntry> queue;
   // This cache has to be alive for Input and Output because Input passes pointers through the queue.
-  std::unordered_map<uint64_t, StringPiece> cache;
+  std::unordered_map<uint64_t, util::StringPiece> cache;
   // Run Input and Output concurrently.  Arbitrarily, we'll do Output in the main thread.
   std::thread input([&queue, &in, &cache, kFlushRate, &opt]{Input(queue, in, cache, kFlushRate, opt);});
   Output(queue, out);

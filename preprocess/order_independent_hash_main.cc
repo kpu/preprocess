@@ -3,7 +3,7 @@
 
 int main() {
   uint64_t sum = 0;
-  for (StringPiece line : util::FilePiece(0)) {
+  for (util::StringPiece line : util::FilePiece(0)) {
     sum += util::MurmurHash64A(line.data(), line.size());
   }
   std::cout << sum << std::endl;

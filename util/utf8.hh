@@ -14,7 +14,7 @@ U_NAMESPACE_BEGIN
 class UnicodeString;
 U_NAMESPACE_END
 
-namespace utf8 {
+namespace util {
 
 class NormalizeException : public std::exception {
   public:
@@ -84,6 +84,6 @@ class Flatten {
     const FlattenData &data_;
 };
 
-} // namespace utf8
+} // namespace util
 
 #endif // UTIL_UTF8
