@@ -17,6 +17,7 @@ set(EXE_LIST
   docenc
   foldfilter
   gigaword_unwrap
+  mmhsum
   order_independent_hash
   process_unicode
   remove_invalid_utf8
