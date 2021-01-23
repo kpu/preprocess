@@ -53,36 +53,53 @@ const char *ICUStupidlyUses32BitIntegersException::what() const throw() {
   return "ICU uses int32_t for string sizes but this string was longer than 2^31-1.  TODO: write a loop around it.";
 }
 
+namespace {
+
+const size_t kInt32Max = 2147483647ULL;
+
 void TODOLoopFor32Bit(const StringPiece &str) {
-  if (str.size() > 2147483647ULL) throw ICUStupidlyUses32BitIntegersException();
+  if (str.size() > kInt32Max) throw ICUStupidlyUses32BitIntegersException();
 }
 
+} // namespace
+
 bool IsUTF8(const StringPiece &str) {
-  size_t offset = 0;
-  size_t length = str.size();
-  while (offset < length) {
-    UChar32 character;
-    /* According to the ICU documentation this is supposed to be int32_t but on
-     * examining the source code
-     * https://unicode-org.github.io/icu-docs/apidoc/dev/icu4c/utf8_8h_source.html#l00352
-     * it can be size_t just fine.
-     */
-    U8_NEXT(str.data(), offset, length, character);
+  const char *cur = str.data();
+  const char *end = str.data() + str.size();
+  UChar32 character;
+  while (end - cur > kInt32Max) {
+    int32_t offset = 0;
+    U8_NEXT(cur, offset, kInt32Max, character);
     if (character < 0) return false;
+    cur += offset;
+  }
+  while (end > cur) {
+    int32_t offset = 0;
+    U8_NEXT(cur, offset, end - cur, character);
+    if (character < 0) return false;
+    cur += offset;
   }
   return true;
 }
 
 bool IsPunctuation(const StringPiece &str) {
-  size_t offset = 0;
-  size_t length = str.size();
-  while (offset < length) {
-    UChar32 character;
-    U8_NEXT(str.data(), offset, length, character);
-    if (character < 0) {
-      throw NotUTF8Exception(str);
-    }
+  const char *cur = str.data();
+  const char *end = str.data() + str.size();
+  UChar32 character;
+
+  while (end - cur > kInt32Max) {
+    int32_t offset = 0;
+    U8_NEXT(cur, offset, kInt32Max, character);
+    if (character < 0) throw NotUTF8Exception(str);
     if (!u_ispunct(character)) return false;
+    cur += offset;
+  }
+  while (end > cur) {
+    int32_t offset = 0;
+    U8_NEXT(cur, offset, end - cur, character);
+    if (character < 0) throw NotUTF8Exception(str);
+    if (!u_ispunct(character)) return false;
+    cur += offset;
   }
   return true;
 }
