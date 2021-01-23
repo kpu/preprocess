@@ -82,5 +82,24 @@ BOOST_AUTO_TEST_CASE(FailLarge) {
   BOOST_CHECK_THROW(ToLower(large, out), ICUStupidlyUses32BitIntegersException);
 }
 
+BOOST_AUTO_TEST_CASE(IsUTF8Test) {
+  BOOST_CHECK(IsUTF8("…œÆ5ôÆÐØôæðø"));
+  BOOST_CHECK(!IsUTF8("…œ\xaaÆ5œÆ5ôÆÐØôæðø"));
+}
+
+/* This has been tested but it uses > 2 GB virtual memory so isn't enabled by default. */
+/* BOOST_AUTO_TEST_CASE(LargeIsUTF8) {
+  const size_t kBufferSize = (1ULL << 32) + 30ULL;
+  std::vector<char> buffer(kBufferSize);
+  StringPiece big(&*buffer.begin(), kBufferSize);
+  BOOST_CHECK(IsUTF8(big));
+  buffer[0] = 129;
+  BOOST_CHECK(!IsUTF8(big));
+  buffer[0] = 0;
+  buffer[1ULL << 32] = 129;
+  BOOST_CHECK(!IsUTF8(big));
+}*/
+
+
 } // namespace
 } // namespace util
