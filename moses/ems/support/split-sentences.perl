@@ -28,6 +28,7 @@ my $LIST_ITEM = 0;
 my $NOP = 0;
 my $KEEP_LINES = 0;
 my $MODE = "singledocument";
+my $LIMIT = 0;
 
 while (@ARGV) {
 	$_ = shift;
@@ -40,10 +41,11 @@ while (@ARGV) {
 	/^-k$/ && ($KEEP_LINES = 1, next);
 	/^-b$/ && ($|++, next); # no output buffering
 	/^-d$/ && ($MODE = "base64documents", next);
+	/^-c$/ && ($LIMIT = shift, next);
 }
 
 if ($HELP) {
-	print "Usage ./split-sentences.perl (-l [en|de|...]) [-p prefix-file] [-q] [-b] < textfile > splitfile\n";
+	print "Usage ./split-sentences.perl (-l [en|de|...]) [-p prefix-file] [-q] [-b] [-c limit]< textfile > splitfile\n";
 	print "-q: quiet mode\n";
 	print "-b: no output buffering (for use in bidirectional pipes)\n";
 	print "-p: use a custom prefix file, overriding the installed one\n";
@@ -51,6 +53,7 @@ if ($HELP) {
 	print "-n: do not emit <P> after paragraphs\n";
 	print "-k: keep existing line boundaries\n";
 	print "-d: work on multiple base64 encoded documents\n";
+	print "-c: skip lines longer than char count entirely\n";
 	exit;
 }
 if (!$QUIET) {
@@ -115,7 +118,10 @@ sub split_single_document {
 	# Loop over text, add lines together until we get a blank line or a <p>
 	while (<$fh>) {
 		chomp;
-		if ($KEEP_LINES) {
+		if ($LIMIT > 0 && length() > $LIMIT) {
+			# Skip extremely long lines entirely.
+			next;
+		} elsif ($KEEP_LINES) {
 			$out .= &split_block($_,"");
 		} elsif (/^<.+>$/ || /^\s*$/) {
 			# Time to process this block; we've hit a blank or <p>
@@ -268,7 +274,9 @@ sub preprocess {
 
 	# We stopped one token from the end to allow for easy look-ahead.
 	# Append it now.
-	$text = $text.$words[$i];
+	if (scalar(@words) > 0) {
+		$text = $text.$words[$i];
+	}
 
 	# Clean up spaces at head and tail of each line as well as any double-spacing
 	$text =~ s/ +/ /g;
