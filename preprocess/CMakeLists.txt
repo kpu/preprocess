@@ -11,6 +11,7 @@ add_library(base64 STATIC base64.cc)
 set(EXE_LIST
   apply_case
   b64filter
+  batch_dedupe
   cache
   commoncrawl_dedupe
   dedupe

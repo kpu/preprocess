@@ -65,6 +65,7 @@ find_package(Boost 1.41.0 REQUIRED COMPONENTS
   program_options
   system
   thread
+  filesystem
   unit_test_framework
 )
 
