@@ -491,7 +491,55 @@ void EnsureOutput(GZipWrite &writer, std::string &to) {
   }
 }
 
+class GZipCompressor : public Compressor {
+public:
+  GZipCompressor(int level)
+  : impl_(level) {
+    //
+  }
+
+  virtual ~GZipCompressor() {
+    //
+  }
+
+  virtual void SetOutput(void *to, std::size_t amount) {
+    impl_.SetOutput(to, amount);
+  }
+
+  virtual void SetInput(const void *base, std::size_t amount) {
+    impl_.SetInput(base, amount);
+  }
+
+  virtual const void* GetOutput() const {
+    return reinterpret_cast<const void *>(impl_.Stream().next_out);
+  }
+
+  virtual void Process() {
+    impl_.Process();
+  }
+
+  virtual bool HasInput() const {
+    return impl_.Stream().avail_in != 0;
+  }
+
+  virtual bool OutOfSpace() const {
+    return impl_.Stream().avail_out < 6; /* magic number in zlib.h to avoid multiple ends */
+  }
+
+  virtual bool Finish() {
+    return impl_.Finish();
+  }
+
+private:
+  GZipWrite impl_; 
+};
+
 } // namespace
+
+GZipFileStream::GZipFileStream(int out, int level, std::size_t buffer_size)
+: CompressedFileStream(std::unique_ptr<GZipCompressor>(new GZipCompressor(level)), out, buffer_size) {
+  //
+}
 
 void GZCompress(StringPiece from, std::string &to, int level) {
   to.clear();

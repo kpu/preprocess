@@ -3,6 +3,7 @@
 
 #include "util/exception.hh"
 #include "util/scoped.hh"
+#include "util/compressed_file_stream.hh"
 
 #include <cstddef>
 #include <stdint.h>
@@ -91,6 +92,11 @@ class ReadCompressed {
 // Very basic gzip compression support.  Normally this would involve streams
 // but I needed the compression in the thread with fused output.
 void GZCompress(StringPiece from, std::string &to, int level = 9);
+
+class GZipFileStream : public CompressedFileStream {
+public:
+  explicit GZipFileStream(int out = -1, int level = 9, std::size_t buffer_size = 8192);
+};
 
 } // namespace util
 

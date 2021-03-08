@@ -1,5 +1,5 @@
 #include "util/file_piece.hh"
-#include "util/file_stream.hh"
+#include "util/compress.hh"
 #include "util/murmur_hash.hh"
 #include "util/probing_hash_table.hh"
 #include <memory>
@@ -122,7 +122,7 @@ public:
 		// (this also closes the old writers through destruction)
 		for (std::size_t col = 0; col < columns_.size(); ++col) {
 			std::string filename(path.str() + columns_[col]);
-			fhs_[col].reset(new util::FileStream(util::CreateOrThrow(filename.c_str())));
+			fhs_[col].reset(new util::GZipFileStream(util::CreateOrThrow(filename.c_str())));
 			bytes_written_[col] = 0;
 		}
 	}
@@ -165,7 +165,7 @@ public:
 			std::ostringstream path;
 			path << path_ << "/" << batch << "/" << name;
 		
-			util::FileStream fout(util::CreateOrThrow(path.str().c_str())); // todo: compress
+			util::GZipFileStream fout(util::CreateOrThrow(path.str().c_str())); // todo: compress
 			while (begin != end && written < offset) {
 				fout << *begin++ << '\n';
 				++written;
@@ -182,7 +182,7 @@ private:
 	std::vector<std::size_t> batch_offsets_;
 	std::size_t lines_written_;
 	std::vector<std::size_t> bytes_written_;
-	std::vector<std::unique_ptr<util::FileStream>> fhs_;
+	std::vector<std::unique_ptr<util::CompressedFileStream>> fhs_;
 };
 
 struct Entry {
