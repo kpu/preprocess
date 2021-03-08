@@ -58,14 +58,15 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 	}
 }
 
+// Batch reader: reads an entry from all columns with each ReadRow
 class Reader {
 public:
 	Reader(std::string const &path, std::vector<std::string> const &columns)
-	: path_(path),
-		columns_(columns)
+	: path_(path)
 	{
 		fhs_.reserve(columns.size());
 
+		// Open all columns at the same time in the same order as `columns`
 		for (auto &&column : columns) {
 			std::string filename(path + "/" + column);
 			fhs_.emplace_back(filename.c_str());
@@ -73,6 +74,7 @@ public:
 	}
 
 	bool ReadRowOrEOF(std::vector<util::StringPiece> &row) {
+		// Make sure we have space for all columns
 		row.resize(fhs_.size());
 
 		for (std::size_t col = 0; col < fhs_.size(); ++col)
@@ -84,10 +86,13 @@ public:
 
 private:
 	std::string path_;
-	std::vector<std::string> columns_;
 	std::vector<util::FilePiece> fhs_;
 };
 
+// Batch writer: writes unique columns on the go, will rotate files if any of
+// the unique columns is about to exceed the specified (uncompressed) limit.
+// Keeps track of which row files were split at so it can write the combined
+// columns with the same splits afterwards.
 class Writer {
 public:
 	Writer(std::string const &path, std::vector<std::string> const &columns, std::size_t limit)
@@ -120,6 +125,7 @@ public:
 	}
 
 	template <typename It> std::size_t WriteRow(It begin, It end) {
+		// Assert we were passed the right number of columns
 		assert(std::distance(begin, end) == columns_.size());
 
 		// Check whether writing any of the columns would push us over the size limit
@@ -131,6 +137,7 @@ public:
 			}
 		}
 
+		// Write each of the columns
 		auto fh_it = fhs_.begin();
 		written_it = bytes_written_.begin();
 		for (auto it = begin; it != end; ++it) {
@@ -157,7 +164,7 @@ public:
 			std::ostringstream path;
 			path << path_ << "/" << batch << "/" << name;
 		
-			util::GZipFileStream fout(util::CreateOrThrow(path.str().c_str())); // todo: compress
+			util::GZipFileStream fout(util::CreateOrThrow(path.str().c_str()));
 			while (begin != end && written < offset) {
 				fout << *begin++ << '\n';
 				++written;
@@ -177,6 +184,7 @@ private:
 	std::vector<std::unique_ptr<util::CompressedFileStream>> fhs_;
 };
 
+
 struct Entry {
 	typedef uint64_t Key;
 	uint64_t key;
@@ -184,6 +192,7 @@ struct Entry {
 	uint64_t GetKey() const { return key; }
 	void SetKey(uint64_t to) { key = to; }
 };
+
 
 template <typename T, typename V> std::size_t FindIndex(T const &container, V const &needle) {
 	std::size_t index = 0;
@@ -227,8 +236,6 @@ struct Concat {
 			out.append(*it);
 		}
 
-		assert(out.size() == size - glue_size); // Did I get it right?
-
 		return out;
 	}
 };
@@ -253,7 +260,7 @@ int main(int argc, char *argv[]) {
 			columns.begin()));
 
 	// For each combined column, for each unqiue row, we have a set of values.
-	// Using std::string instead of StringPiece here because StringPiece doesnt
+	// Using std::string instead of StringPiece here because StringPiece doesn't
 	// own its memory, and Reader will have progressed when we need these strings
 	// again.
 	std::vector<std::vector<std::unordered_set<std::string>>> combined_column_values(options.combined.size());
@@ -281,6 +288,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	// Write the combined columns
 	for (std::size_t col = 0; col < options.combined.size(); ++col)
 		fout.WriteColumn(options.combined[col],
 			boost::make_transform_iterator(combined_column_values[col].begin(), Concat(options.glue)), 
