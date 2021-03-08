@@ -56,14 +56,6 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 		          << "\n" << visible << "\n";
 		std::exit(1);
 	}
-
-	std::cerr << "Unique column:" << out.unique << "\n";
-	std::cerr << "\nColumns to combine with '" << out.glue << "':\n";
-	for (std::string const &column : out.combined)
-		std::cerr << "- " << column << "\n";
-	std::cerr << "\nColumns to keep only one value of:\n";
-	for (std::string const &column : out.derived)
-		std::cerr << "- " << column << "\n";
 }
 
 class Reader {
