@@ -1,10 +1,12 @@
 #include "util/file_piece.hh"
 #include "util/compress.hh"
 #include "util/murmur_hash.hh"
+#include "util/pcqueue.hh"
 #include "util/probing_hash_table.hh"
 #include <memory>
 #include <numeric>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 #include <boost/filesystem.hpp>
@@ -89,6 +91,44 @@ private:
 	std::vector<util::FilePiece> fhs_;
 };
 
+// Dispatches compressed write calls in a background thread.
+// Joins (and thus blocks) on destruction.
+class AsyncWriter {
+public:
+	AsyncWriter(int fh)
+	: queue_(kOperationQueueSize) {
+		auto &queue = queue_;
+		writer_  = std::thread([&queue, fh]() {
+			util::GZipFileStream fout(fh);
+			std::string text;
+			while (!queue.Consume(text).empty())
+				fout << text;
+		});
+	}
+
+	~AsyncWriter() {
+		Close();
+	}
+
+	void Write(std::string &&text) {
+		// Empty write would be pointless, and kill the thread. And we can safely
+		// ignore an empty write I think.
+		if (UTIL_LIKELY(!text.empty()))
+			queue_.Produce(std::move(text));
+	}
+
+	void Close() {
+		queue_.Produce(std::string());
+		writer_.join();
+	}
+
+private:
+	// Arbitrary number, but in my tests kept memory usage around 2GB.
+	static const std::size_t kOperationQueueSize = 8192;
+	util::PCQueue<std::string> queue_;
+	std::thread writer_;
+};
+
 // Batch writer: writes unique columns on the go, will rotate files if any of
 // the unique columns is about to exceed the specified (uncompressed) limit.
 // Keeps track of which row files were split at so it can write the combined
@@ -119,7 +159,7 @@ public:
 		// (this also closes the old writers through destruction)
 		for (std::size_t col = 0; col < columns_.size(); ++col) {
 			std::string filename(path.str() + columns_[col]);
-			fhs_[col].reset(new util::GZipFileStream(util::CreateOrThrow(filename.c_str())));
+			fhs_[col].reset(new AsyncWriter(util::CreateOrThrow(filename.c_str())));
 			bytes_written_[col] = 0;
 		}
 	}
@@ -141,8 +181,12 @@ public:
 		auto fh_it = fhs_.begin();
 		written_it = bytes_written_.begin();
 		for (auto it = begin; it != end; ++it) {
-			*(*fh_it++) << *it << '\n';
-			*written_it++ += it->size() + 1; // plus newline
+			std::string line;
+			line.reserve(it->size() + 1);
+			line.append(it->data(), it->size());
+			line.append("\n");
+			*written_it++ += line.size();
+			(*fh_it++)->Write(std::move(line));
 		}
 
 		return lines_written_++;
@@ -181,7 +225,7 @@ private:
 	std::vector<std::size_t> batch_offsets_;
 	std::size_t lines_written_;
 	std::vector<std::size_t> bytes_written_;
-	std::vector<std::unique_ptr<util::CompressedFileStream>> fhs_;
+	std::vector<std::unique_ptr<AsyncWriter>> fhs_;
 };
 
 
