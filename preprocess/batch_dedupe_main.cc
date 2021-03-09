@@ -290,7 +290,7 @@ int main(int argc, char *argv[]) {
 	std::size_t unique = FindIndex(options.derived, options.unique);
 	UTIL_THROW_IF2(unique == options.derived.size(), "unique column has to be part of derived columns");
 
-	Writer fout(".", options.derived, 1024 * 1024 * 1024);
+	Writer fout(options.output, options.derived, 1024 * 1024 * 1024);
 
 	typedef util::AutoProbing<Entry, util::IdentityHash> Table;
 	Table table;
