@@ -95,8 +95,7 @@ private:
 // Joins (and thus blocks) on destruction.
 class AsyncWriter {
 public:
-	AsyncWriter(int fh)
-	: queue_(kOperationQueueSize) {
+	AsyncWriter(int fh) {
 		auto &queue = queue_;
 		writer_  = std::thread([&queue, fh]() {
 			util::GZipFileStream fout(fh);
@@ -123,9 +122,7 @@ public:
 	}
 
 private:
-	// Arbitrary number, but in my tests kept memory usage around 2GB.
-	static const std::size_t kOperationQueueSize = 8192;
-	util::PCQueue<std::string> queue_;
+	util::UnboundedSingleQueue<std::string> queue_;
 	std::thread writer_;
 };
 
