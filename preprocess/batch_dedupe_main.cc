@@ -64,8 +64,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 class Reader {
 public:
 	Reader(std::string const &path, std::vector<std::string> const &columns)
-	: path_(path)
-	{
+	: path_(path) {
 		fhs_.reserve(columns.size());
 
 		// Open all columns at the same time in the same order as `columns`
@@ -95,7 +94,8 @@ private:
 // Joins (and thus blocks) on destruction.
 class AsyncWriter {
 public:
-	AsyncWriter(int fh) {
+	AsyncWriter(int fh)
+	: file_(fh) {
 		auto &queue = queue_;
 		writer_  = std::thread([&queue, fh]() {
 			util::GZipFileStream fout(fh);
@@ -124,6 +124,7 @@ public:
 private:
 	util::UnboundedSingleQueue<std::string> queue_;
 	std::thread writer_;
+	util::scoped_fd file_;
 };
 
 // Batch writer: writes unique columns on the go, will rotate files if any of
@@ -138,8 +139,7 @@ public:
 		limit_(limit),
 		lines_written_(0),
 		bytes_written_(columns.size(), limit + 1), // force rotate at start
-		fhs_(columns.size())
-	{
+		fhs_(columns.size()) {
 		//
 	}
 
