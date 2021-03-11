@@ -247,8 +247,27 @@ template <typename T, typename V> std::size_t FindIndex(T const &container, V co
 	return index;
 }
 
-// Needlessly complicated string concatenation operator that does only one
-// memory allocation if I got it right.
+// Little wrapper around an unordered set that remembers the glue, and can be
+// written to an FakeOStream as if it were an already concatenated string.
+struct ConcatenatedSet {
+	std::string const &glue;
+	std::unordered_set<std::string> const &values;
+};
+
+template <class Derived> util::FakeOStream<Derived> &operator<<(util::FakeOStream<Derived> &os, ConcatenatedSet const &wrapper) {
+	if (wrapper.values.empty())
+		return os;
+
+	auto it = wrapper.values.begin();
+	os << *it;
+	while (++it != wrapper.values.end())
+		os << wrapper.glue << *it;
+	
+	return os;
+}
+
+// "function" that creates a ConcatenatedSet so it can be used as operation
+// in a transform iterator.
 struct Concat {
 	std::string glue;
 
@@ -256,28 +275,8 @@ struct Concat {
 		//
 	}
 
-	std::string operator()(std::unordered_set<std::string> const &values) const {
-		std::size_t glue_size = glue.size();
-
-		std::size_t size = std::accumulate(values.begin(), values.end(), 0,
-			[glue_size](std::size_t size, std::string const &value) {
-				return size + value.size() + glue_size; //` plus a space
-			});
-
-		if (size == 0)
-			return std::string();
-
-		std::string out;
-		out.reserve(size - glue_size); // Glue only between, so -1
-
-		auto it = values.begin();
-		out.append(*it);
-		while (++it != values.end()) {
-			out.append(glue);
-			out.append(*it);
-		}
-
-		return out;
+	ConcatenatedSet operator()(std::unordered_set<std::string> const &values) const {
+		return ConcatenatedSet{.glue=glue, .values=values};
 	}
 };
 
@@ -329,7 +328,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// Write the combined columns
+	// Write the combined columns. Uses Concat which wraps the sets directly to
+	// skip having to make a single string per row (as those might have become
+	// quite large at this point.)
 	for (std::size_t col = 0; col < options.combined.size(); ++col)
 		fout.WriteColumn(options.combined[col],
 			boost::make_transform_iterator(combined_column_values[col].begin(), Concat(options.glue)), 
