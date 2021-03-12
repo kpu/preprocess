@@ -205,7 +205,8 @@ public:
 			std::ostringstream path;
 			path << path_ << "/" << batch << "/" << name;
 		
-			util::GZipFileStream fout(util::CreateOrThrow(path.str().c_str()));
+			util::scoped_fd fd(util::CreateOrThrow(path.str().c_str()));
+			util::GZipFileStream fout(fd.get());
 			while (begin != end && written < offset) {
 				fout << *begin++ << '\n';
 				++written;
