@@ -9,6 +9,8 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+#include <iomanip>
+#include <iostream>
 #include <boost/filesystem.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>
@@ -25,6 +27,7 @@ struct Options {
 	std::string output{"."};
 	std::size_t size{1024 * 1024 * 1024};
 	std::string glue{" "};
+	bool verbose{false};
 };
 
 void ParseArgs(int argc, char *argv[], Options &out) {
@@ -37,6 +40,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 		("output,o", po::value(&out.output), "Output path")
 		("bytes,b", po::value(&out.size), "Maximum batch size")
 		("glue,g", po::value(&out.glue), "Glue between combined values")
+		("verbose,v", po::bool_switch(&out.verbose), "Print progress updates")
 		("help,h", "Produce help message");
 
 	po::options_description hidden("Hidden options");
@@ -305,11 +309,19 @@ int main(int argc, char *argv[]) {
 	// again.
 	std::vector<std::vector<std::unordered_set<std::string>>> combined_column_values(options.combined.size());
 
+	std::size_t records_cnt = 0, unique_cnt = 0;
+
 	std::vector<util::StringPiece> row(columns.size());
 
-	for (auto &&path : options.batches) {
-		Reader batch(path, columns);
+	for (std::size_t i = 0; i < options.batches.size(); ++i) {
+		if (options.verbose)
+			std::cerr << "Reading " << (i + 1) << "/" << options.batches.size()
+			          << ": " << options.batches[i] << std::endl;
+
+		Reader batch(options.batches[i], columns);
 		while (batch.ReadRowOrEOF(row)) {
+			++records_cnt;
+
 			Entry entry;
 			entry.key = util::MurmurHashNative(row[unique].begin(), row[unique].size()) + 1;
 			
@@ -319,6 +331,8 @@ int main(int argc, char *argv[]) {
 				
 				for (std::size_t col = 0; col < options.combined.size(); ++col)
 					combined_column_values[col].emplace_back(); // Add a new set
+
+				++unique_cnt;
 			}
 
 			for (std::size_t col = 0; col < options.combined.size(); ++col) {
@@ -326,6 +340,11 @@ int main(int argc, char *argv[]) {
 				combined_column_values[col][it->offset].insert(std::string(value.data(), value.size()));
 			}
 		}
+
+		if (options.verbose)
+			std::cerr << "Kept " << unique_cnt << " out of " << records_cnt << " records so far"
+			          << " (" << std::setprecision(2) << (100.0 * unique_cnt / records_cnt) << "%)"
+			          << std::endl;
 	}
 
 	// Write the combined columns. Uses Concat which wraps the sets directly to
