@@ -94,13 +94,12 @@ private:
 // Joins (and thus blocks) on destruction.
 class AsyncWriter {
 public:
-	AsyncWriter(int fh)
-	: file_(fh) {
-		auto &queue = queue_;
-		writer_  = std::thread([&queue, fh]() {
-			util::GZipFileStream fout(fh);
+	AsyncWriter(std::string const &filename)
+	: file_(util::CreateOrThrow(filename.c_str())) {
+		writer_  = std::thread([this]() {
+			util::GZipFileStream fout(this->file_.get());
 			std::string text;
-			while (!queue.Consume(text).empty())
+			while (!this->queue_.Consume(text).empty())
 				fout << text;
 		});
 	}
@@ -156,7 +155,7 @@ public:
 		// (this also closes the old writers through destruction)
 		for (std::size_t col = 0; col < columns_.size(); ++col) {
 			std::string filename(path.str() + columns_[col]);
-			fhs_[col].reset(new AsyncWriter(util::CreateOrThrow(filename.c_str())));
+			fhs_[col].reset(new AsyncWriter(filename));
 			bytes_written_[col] = 0;
 		}
 	}
