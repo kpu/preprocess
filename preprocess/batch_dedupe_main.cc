@@ -21,13 +21,13 @@ namespace {
 
 struct Options {
 	std::vector<std::string> batches;
-	std::vector<std::string> combined{"url.gz","source.gz"};
-	std::vector<std::string> derived{"plain_text.gz", "sentences.gz", "sentences_en.gz"};
-	std::string unique{"sentences.gz"};
-	std::string output{"."};
-	std::size_t size{1024 * 1024 * 1024};
-	std::string glue{" "};
-	bool verbose{false};
+	std::vector<std::string> combined;
+	std::vector<std::string> derived;
+	std::string unique;
+	std::string output;
+	std::size_t size;
+	std::string glue;
+	bool verbose;
 };
 
 void ParseArgs(int argc, char *argv[], Options &out) {
@@ -37,10 +37,10 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 		("combined,c", po::value(&out.combined)->multitoken(), "Columns that should be combined")
 		("derived,d", po::value(&out.derived)->multitoken(), "Columns that are derived")
 		("unique,u", po::value(&out.unique), "Column to deduplicate on")
-		("output,o", po::value(&out.output), "Output path")
-		("bytes,b", po::value(&out.size), "Maximum batch size")
-		("glue,g", po::value(&out.glue), "Glue between combined values")
-		("verbose,v", po::bool_switch(&out.verbose), "Print progress updates")
+		("output,o", po::value(&out.output)->default_value("."), "Output path")
+		("bytes,b", po::value(&out.size)->default_value(1024 * 1024 * 1024), "Maximum batch size")
+		("glue,g", po::value(&out.glue)->default_value(" "), "Glue between combined values")
+		("verbose,v", po::bool_switch(&out.verbose)->default_value(false), "Print progress updates")
 		("help,h", "Produce help message");
 
 	po::options_description hidden("Hidden options");
