@@ -20,14 +20,15 @@
 namespace {
 
 struct Options {
-	std::vector<std::string> batches;
-	std::vector<std::string> combined;
-	std::vector<std::string> derived;
-	std::string unique;
-	std::string output;
-	std::size_t size;
-	std::string glue;
-	bool verbose;
+	std::vector<std::string> batches; // Input batches to ingest
+	std::vector<std::string> combined; // Column files that should be combined in the new batches
+	std::vector<std::string> derived; // Column files that should also be copied to the new batches
+	std::string unique; // Name of column file on which we're deduplicating
+	std::string output; // Directory where batches get written to
+	std::size_t size; // Size of batches
+	std::size_t combined_limit; // Maximum number of items in a combined column row
+	std::string glue; // Glue used between values in the combined column row
+	bool verbose; // Print progress updates
 };
 
 void ParseArgs(int argc, char *argv[], Options &out) {
@@ -39,6 +40,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
 		("unique,u", po::value(&out.unique), "Column to deduplicate on")
 		("output,o", po::value(&out.output)->default_value("."), "Output path")
 		("bytes,b", po::value(&out.size)->default_value(1024 * 1024 * 1024), "Maximum batch size")
+		("limit,l", po::value(&out.combined_limit)->default_value(-1), "Maximum number of combined values in a row")
 		("glue,g", po::value(&out.glue)->default_value(" "), "Glue between combined values")
 		("verbose,v", po::bool_switch(&out.verbose)->default_value(false), "Print progress updates")
 		("help,h", "Produce help message");
@@ -336,8 +338,10 @@ int main(int argc, char *argv[]) {
 			}
 
 			for (std::size_t col = 0; col < options.combined.size(); ++col) {
-				util::StringPiece const &value = row[options.derived.size() + col];
-				combined_column_values[col][it->offset].insert(std::string(value.data(), value.size()));
+				if (combined_column_values[col][it->offset].size() < options.combined_limit) {
+					util::StringPiece const &value = row[options.derived.size() + col];
+					combined_column_values[col][it->offset].emplace(value.data(), value.size());
+				}
 			}
 		}
 
