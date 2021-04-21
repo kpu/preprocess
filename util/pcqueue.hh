@@ -16,6 +16,8 @@
 #include <mach/mach.h>
 #elif defined(__linux)
 #include <semaphore.h>
+#elif defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
 #else
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #endif
@@ -67,13 +69,13 @@ class Semaphore {
 
     ~Semaphore() {
       if (-1 == sem_destroy(&sem_)) {
-        std::cerr << "Could not destroy semaphore " << ErrnoException().what() << std::endl;
+        std::cerr << "Could not destroy semaphore" << std::endl;
         abort();
       }
     }
 
     void wait() {
-      while (UTIL_UNLIKELY(-1 == sem_wait(&sem_))) {
+      while (-1 == sem_wait(&sem_)) {
         UTIL_THROW_IF(errno != EINTR, ErrnoException, "Wait for semaphore failed");
       }
     }
@@ -84,6 +86,46 @@ class Semaphore {
 
   private:
     sem_t sem_;
+};
+
+inline void WaitSemaphore(Semaphore &semaphore) {
+  semaphore.wait();
+}
+
+#elif defined(_WIN32) || defined(_WIN64)
+
+class Semaphore {
+  public:
+    explicit Semaphore(LONG value) : sem_(CreateSemaphoreA(NULL, value, 2147483647, NULL)) {
+      UTIL_THROW_IF(!sem_, Exception, "Could not CreateSemaphore " << GetLastError());
+    }
+
+    ~Semaphore() {
+      CloseHandle(sem_);
+    }
+
+
+    void wait() {
+      while (true) {
+        switch (WaitForSingleObject(sem_, 0L)) {
+          case WAIT_OBJECT_0:
+            return;
+          case WAIT_ABANDONED:
+            UTIL_THROW(Exception, "A semaphore can't be abandoned, confused by Windows");
+          case WAIT_TIMEOUT:
+            continue;
+          case WAIT_FAILED:
+            UTIL_THROW(Exception, "Waiting on Semaphore failed " << GetLastError());
+        }
+      }
+    }
+
+    void post() {
+      UTIL_THROW_IF(!ReleaseSemaphore(sem_, 1, NULL), Exception, "Failed to release Semaphore " << GetLastError());
+    }
+
+  private:
+    HANDLE sem_;
 };
 
 inline void WaitSemaphore(Semaphore &semaphore) {
@@ -107,7 +149,7 @@ inline void WaitSemaphore (Semaphore &on) {
   }
 }
 
-#endif // Apple
+#endif // Cases for semaphore support
 
 /**
  * Producer consumer queue safe for multiple producers and multiple consumers.
