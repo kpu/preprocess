@@ -29,6 +29,5 @@ class Dedupe {
 };
 
 int main(int argc, char *argv[]) {
-  Dedupe dedupe;
-  return FilterParallel(dedupe, argc, argv);
+  return FilterParallel<Dedupe>(argc, argv);
 }

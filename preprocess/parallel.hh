@@ -8,9 +8,10 @@
 
 #include <stdint.h>
 
-template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
+template <class Pass> int FilterParallel(int argc, char **argv) {
   uint64_t input = 0, output = 0;
   if (argc == 1) {
+    Pass pass;
     util::StringPiece line;
     util::FilePiece in(0, NULL, &std::cerr);
     util::FileStream out(1);
@@ -25,6 +26,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
       }
     }
   } else if (argc == 5) {
+    Pass pass0, pass1;
     util::StringPiece line0, line1;
     util::FilePiece in0(argv[1], &std::cerr), in1(argv[2]);
     util::FileStream out0(util::CreateOrThrow(argv[3])), out1(util::CreateOrThrow(argv[4]));
@@ -34,7 +36,7 @@ template <class Pass> int FilterParallel(Pass &pass, int argc, char **argv) {
       } catch (const util::EndOfFileException &e) { break; }
       line1 = in1.ReadLine();
       ++input;
-      if (pass(line0) && pass(line1)) {
+      if (pass0(line0) && pass1(line1)) {
         out0 << line0 << '\n';
         out1 << line1 << '\n';
         ++output;

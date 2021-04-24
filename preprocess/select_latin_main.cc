@@ -36,6 +36,5 @@ struct SelectLatin {
 };
 
 int main(int argc, char *argv[]) {
-  SelectLatin process;
-  return FilterParallel(process, argc, argv);
+  return FilterParallel<SelectLatin>(argc, argv);
 }
