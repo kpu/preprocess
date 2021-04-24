@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
 
 	std::thread feeder([&child_in_fd, &queue, &options]() {
 		util::FilePiece in(STDIN_FILENO);
-		util::FileStream child_in(child_in_fd.get());
+		util::FileStream child_in(child_in_fd.release());
 
 		for (util::StringPiece sentence : in) {
 			std::deque<util::StringPiece> lines;
@@ -252,7 +252,6 @@ int main(int argc, char **argv) {
 
 		// Flush (blocks) & close the child's stdin
 		child_in.flush();
-		child_in_fd.reset();
 	});
 
 	std::thread reader([&child_out_fd, &queue, &options]() {

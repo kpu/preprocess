@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
 	std::thread feeder([&child_in_fd, &line_cnt_queue]() {
 		util::FilePiece in(STDIN_FILENO);
-		util::FileStream child_in(child_in_fd.get());
+		util::FileStream child_in(child_in_fd.release());
 
 		// Decoded document buffer
 		std::string doc;
@@ -68,9 +68,8 @@ int main(int argc, char **argv) {
 			.has_trailing_newline = false
 		});
 
-		// Flush (blocks) & close the child's stdin
+		// Flush (blocks).  The FileStream destructor closes.
 		child_in.flush();
-		child_in_fd.reset();
 	});
 
 	std::thread reader([&child_out_fd, &line_cnt_queue]() {

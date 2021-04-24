@@ -137,6 +137,7 @@ void ErsatzPRead(int fd, void *to, std::size_t size, uint64_t off);
 void ErsatzPWrite(int fd, const void *data_void, std::size_t size, uint64_t off);
 
 void FSyncOrThrow(int fd);
+void FSyncIgnoreUnsupported(int fd);
 
 // Seeking: returns offset
 uint64_t SeekOrThrow(int fd, uint64_t off);
@@ -163,6 +164,23 @@ int DupOrThrow(int fd);
  * and logging only.
  */
 std::string NameFromFD(int fd);
+
+/* Used for BufferedWriter interface */
+class FileWriter {
+  public:
+    explicit FileWriter(int out) : fd_(out) {}
+
+    void write(const void *data, size_t amount) {
+      WriteOrThrow(fd_.get(), data, amount);
+    }
+
+    void flush() {
+      FSyncIgnoreUnsupported(fd_.get());
+    }
+
+  private:
+    scoped_fd fd_;
+};
 
 } // namespace util
 

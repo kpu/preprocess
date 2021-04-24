@@ -126,7 +126,7 @@ BOOST_AUTO_TEST_CASE(WriteGZ) {
 BOOST_AUTO_TEST_CASE(WriteCompressedTest) {
   scoped_fd file(MakeTemp(DefaultTempDirectory()));
   {
-    WriteCompressed writer(file.get());
+    WriteCompressed writer(DupOrThrow(file.get()));
     uint32_t i = 0;
     /* Flush somewhere */
     for (; i < kSize4 / 3; ++i) {

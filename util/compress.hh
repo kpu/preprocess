@@ -2,6 +2,7 @@
 #define UTIL_COMPRESS_H
 
 #include "util/exception.hh"
+#include "util/file.hh"
 #include "util/scoped.hh"
 
 #include <cstddef>
@@ -88,12 +89,12 @@ class ReadCompressed {
     uint64_t raw_amount_;
 };
 
-
 class GZipWrite;
 
 /* Currently gzip only support. */
 class WriteCompressed {
   public:
+    // Takes ownership of fd.
     explicit WriteCompressed(int fd, int level = 9, std::size_t compressed_buffer = 4096);
 
     ~WriteCompressed();
@@ -109,7 +110,7 @@ class WriteCompressed {
 
     scoped_ptr<GZipWrite> compressor_;
     // TODO: generic Writer backend.
-    int fd_;
+    FileWriter writer_;
 
     bool dirty_; // Do we have stuff to write to the file with flush?
 };

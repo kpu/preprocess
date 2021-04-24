@@ -48,7 +48,7 @@ private:
 void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &process_input, std::unordered_map<uint64_t, util::StringPiece> &cache, std::size_t flush_rate, Options &options) {
   QueueEntry q_entry;
   {
-    util::FileStream process(process_input.get());
+    util::FileStream process(process_input.release());
     std::pair<uint64_t, util::StringPiece> entry;
     std::size_t flush_count = flush_rate;
     // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
@@ -73,7 +73,6 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
       queue.Produce(q_entry);
     }
   }
-  process_input.reset();
   // Poison.
   q_entry.value = NULL;
   queue.Produce(q_entry);

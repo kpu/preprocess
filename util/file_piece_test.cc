@@ -156,11 +156,11 @@ BOOST_AUTO_TEST_CASE(Numbers) {
   scoped_fd file(MakeTemp(FileLocation()));
   const float floating = 3.2;
   {
-    util::FileStream writing(file.get());
+    util::FileStream writing(DupOrThrow(file.get()));
     writing << "94389483984398493890287 " << floating << " 5";
   }
   SeekOrThrow(file.get(), 0);
-  util::FilePiece f(file.release());
+  FilePiece f(file.release());
   BOOST_CHECK_THROW(f.ReadULong(), ParseNumberException);
   BOOST_CHECK_EQUAL("94389483984398493890287", f.ReadDelimited());
   // Yes, exactly equal.  Isn't double-conversion wonderful?

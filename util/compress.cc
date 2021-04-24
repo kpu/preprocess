@@ -556,7 +556,7 @@ WriteCompressed::WriteCompressed(int out, int level, std::size_t compressed_buff
   : buf_size_(std::max<std::size_t>(GZipWrite::kMinOutput, compressed_buffer)),
     buf_(buf_size_),
     compressor_(new GZipWrite(level)),
-    fd_(out),
+    writer_(out),
     dirty_(true /* Even if input is empty, generate a valid gzip file */) {
   compressor_->SetOutput(buf_.get(), buf_size_);
 }
@@ -575,7 +575,7 @@ void WriteCompressed::write(const void *data_void, std::size_t amount) {
   compressor_->SetInput(data, amount);
   while (compressor_->AvailInput()) {
     if (!compressor_->EnoughOutput()) {
-      WriteOrThrow(fd_, buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+      writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
       compressor_->SetOutput(buf_.get(), buf_size_);
     }
     compressor_->Process();
@@ -587,14 +587,14 @@ void WriteCompressed::flush() {
   if (!dirty_) return;
   do {
     if (!compressor_->EnoughOutput()) {
-      WriteOrThrow(fd_, buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+      writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
       compressor_->SetOutput(buf_.get(), buf_size_);
     }
   } while (!compressor_->Finish());
   if (compressor_->NextOutput() != buf_.get()) {
-    WriteOrThrow(fd_, buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+    writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
   }
-  FSyncOrThrow(fd_);
+  writer_.flush();
   compressor_->Reset();
   compressor_->SetOutput(buf_.get(), buf_size_);
   dirty_ = false; /* No need for an empty gzip after the first one */

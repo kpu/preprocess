@@ -314,6 +314,16 @@ void FSyncOrThrow(int fd) {
 #endif
 }
 
+void FSyncIgnoreUnsupported(int fd) {
+// Apparently windows doesn't have fsync?
+#if !defined(_WIN32) && !defined(_WIN64)
+  if (!fsync(fd)) return;
+  // "fd is bound to a special file (e.g., a pipe, FIFO, or socket) which does not support synchronization."
+  if (errno == EROFS || errno == EINVAL) return;
+  UTIL_THROW_ARG(FDException, (fd), "while syncing fd " << fd);
+#endif
+}
+
 namespace {
 
 // Static assert for 64-bit off_t size.
