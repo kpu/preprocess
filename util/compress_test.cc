@@ -121,6 +121,27 @@ BOOST_AUTO_TEST_CASE(WriteGZ) {
 
   BOOST_CHECK(returned == input);
 }
+
+
+BOOST_AUTO_TEST_CASE(WriteCompressedTest) {
+  scoped_fd file(MakeTemp(DefaultTempDirectory()));
+  {
+    WriteCompressed writer(file.get());
+    uint32_t i = 0;
+    /* Flush somewhere */
+    for (; i < kSize4 / 3; ++i) {
+      writer.write(&i, sizeof(uint32_t));
+    }
+    writer.flush();
+    for (; i < kSize4; ++i) {
+      writer.write(&i, sizeof(uint32_t));
+    }
+  }
+  SeekOrThrow(file.get(), 0);
+  ReadCompressed reader(file.release());
+  VerifyRead(reader);
+}
+
 #endif // HAVE_ZLIB
 
 #ifdef HAVE_BZLIB

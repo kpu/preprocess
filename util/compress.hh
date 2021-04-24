@@ -88,6 +88,32 @@ class ReadCompressed {
     uint64_t raw_amount_;
 };
 
+
+class GZipWrite;
+
+/* Currently gzip only support. */
+class WriteCompressed {
+  public:
+    explicit WriteCompressed(int fd, int level = 9, std::size_t compressed_buffer = 4096);
+
+    ~WriteCompressed();
+
+    void write(const void *data, std::size_t amount);
+
+    void flush();
+
+  private:
+    // Holding compressed data.
+    std::size_t buf_size_;
+    scoped_malloc buf_;
+
+    scoped_ptr<GZipWrite> compressor_;
+    // TODO: generic Writer backend.
+    int fd_;
+
+    bool dirty_; // Do we have stuff to write to the file with flush?
+};
+
 // Very basic gzip compression support.  Normally this would involve streams
 // but I needed the compression in the thread with fused output.
 void GZCompress(StringPiece from, std::string &to, int level = 9);
