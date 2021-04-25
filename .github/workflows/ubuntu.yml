@@ -1,0 +1,29 @@
+name: Ubuntu
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: dependencies
+      run: sudo apt-get install -y build-essential libboost-all-dev cmake zlib1g-dev libbz2-dev liblzma-dev libicu-dev
+    - name: cmake
+      run: |
+        cmake -E make_directory build
+        cd build
+        cmake ..
+    - name: Compile
+      working-directory: build
+      run: cmake --build . -j2
+    - name: Unit Tests
+      working-directory: build
+      run: ctest -j2
+    - name: Regression Tests
+      run: preprocess/tests/run.sh
