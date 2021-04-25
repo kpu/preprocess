@@ -69,7 +69,7 @@ template <class Writer> class BufferedStream : public FakeOStream<BufferedStream
     // For writes directly to buffer guaranteed to have amount < buffer size.
     char *Ensure(std::size_t amount) {
       if (UTIL_UNLIKELY(current_ + amount > end_)) {
-        flush();
+        SpillBuffer();
         assert(current_ + amount <= end_);
       }
       return current_;
