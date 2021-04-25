@@ -1,5 +1,6 @@
 #include "preprocess/fields.hh"
 #include "util/buffered_stream.hh"
+#include "util/threaded_buffered_stream.hh"
 #include "util/file_piece.hh"
 #include "util/fixed_array.hh"
 #include "util/murmur_hash.hh"
@@ -96,7 +97,7 @@ int main(int argc, char *argv[]) {
 
   util::FilePiece in(0);
   util::StringPiece line;
-  util::FixedArray<util::BufferedStream<util::WriteCompressed> > out(options.outputs.size());
+  util::FixedArray<util::ThreadedBufferedStream<util::WriteCompressed> > out(options.outputs.size());
   std::string output(argv[1]);
   for (const std::string &o : options.outputs) {
     out.push_back(util::CreateOrThrow(o.c_str()), options.compression);

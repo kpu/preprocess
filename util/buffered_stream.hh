@@ -22,11 +22,11 @@ namespace util {
 
 template <class Writer> class BufferedStream : public FakeOStream<BufferedStream<Writer> > {
   public:
-    const std::size_t kBufferSize = 8192;
+    const std::size_t kBufferSize = std::max<size_t>(8192, kToStringMaxBytes);
     template <typename... Args> explicit BufferedStream(Args&&... args)
-      : buf_(util::MallocOrThrow(std::max<std::size_t>(kBufferSize, kToStringMaxBytes))),
+      : buf_(kBufferSize),
         current_(static_cast<char*>(buf_.get())),
-        end_(current_ + std::max<std::size_t>(kBufferSize, kToStringMaxBytes)),
+        end_(current_ + kBufferSize),
         writer_(std::forward<Args>(args)...) {}
 
     /* The source of the move is left in an unusable state that can only be destroyed. */
@@ -92,6 +92,6 @@ template <class Writer> class BufferedStream : public FakeOStream<BufferedStream
     Writer writer_;
 };
 
-} // namespace
+} // namespace util
 
 #endif
