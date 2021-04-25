@@ -97,11 +97,37 @@ BOOST_AUTO_TEST_CASE(Uncompressed) {
   TestSequence("cat");
 }
 
+void WriteCompressedTest(WriteCompressed::Compression compression) {
+  scoped_fd file(MakeTemp(DefaultTempDirectory()));
+  {
+    WriteCompressed writer(DupOrThrow(file.get()), compression);
+    uint32_t i = 0;
+    /* Flush somewhere */
+    for (; i < kSize4 / 3; ++i) {
+      writer.write(&i, sizeof(uint32_t));
+    }
+    writer.flush();
+    for (; i < kSize4; ++i) {
+      writer.write(&i, sizeof(uint32_t));
+    }
+  }
+  SeekOrThrow(file.get(), 0);
+  ReadCompressed reader(file.release());
+  VerifyRead(reader);
+}
+
+BOOST_AUTO_TEST_CASE(UncompressedWrite) {
+  WriteCompressedTest(WriteCompressed::NONE);
+}
+
 #ifdef HAVE_ZLIB
 BOOST_AUTO_TEST_CASE(ReadGZ) {
   TestSequence("gzip");
 }
 BOOST_AUTO_TEST_CASE(WriteGZ) {
+  WriteCompressedTest(WriteCompressed::GZIP);
+}
+BOOST_AUTO_TEST_CASE(WriteGZString) {
   std::string input;
   input.resize(kSize4 * 4);
   for (uint32_t i = 0; i < kSize4; ++i) {
@@ -121,32 +147,14 @@ BOOST_AUTO_TEST_CASE(WriteGZ) {
 
   BOOST_CHECK(returned == input);
 }
-
-
-BOOST_AUTO_TEST_CASE(WriteCompressedTest) {
-  scoped_fd file(MakeTemp(DefaultTempDirectory()));
-  {
-    WriteCompressed writer(DupOrThrow(file.get()));
-    uint32_t i = 0;
-    /* Flush somewhere */
-    for (; i < kSize4 / 3; ++i) {
-      writer.write(&i, sizeof(uint32_t));
-    }
-    writer.flush();
-    for (; i < kSize4; ++i) {
-      writer.write(&i, sizeof(uint32_t));
-    }
-  }
-  SeekOrThrow(file.get(), 0);
-  ReadCompressed reader(file.release());
-  VerifyRead(reader);
-}
-
 #endif // HAVE_ZLIB
 
 #ifdef HAVE_BZLIB
 BOOST_AUTO_TEST_CASE(ReadBZ) {
   TestSequence("bzip2");
+}
+BOOST_AUTO_TEST_CASE(WriteBZ) {
+  WriteCompressedTest(WriteCompressed::BZIP);
 }
 #endif // HAVE_BZLIB
 

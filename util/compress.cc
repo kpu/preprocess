@@ -107,9 +107,9 @@ class UncompressedWithHeader : public ReadBase {
 
 static const std::size_t kInputBuffer = 16384;
 
-template <class Compression> class StreamCompressed : public ReadBase {
+template <class Compression> class ReadStream : public ReadBase {
   public:
-    StreamCompressed(int fd, const void *already_data, std::size_t already_size)
+    ReadStream(int fd, const void *already_data, std::size_t already_size)
       : file_(fd),
         in_buffer_(MallocOrThrow(kInputBuffer)),
         back_(memcpy(in_buffer_.get(), already_data, already_size), already_size) {}
@@ -248,7 +248,7 @@ class GZipWrite : public GZip {
     }
 
     bool Finish() {
-      UTIL_THROW_IF(!stream_.avail_out, Exception, "No available output.");
+      assert(stream_.avail_out);
       int result = deflate(&stream_, Z_FINISH);
       switch (result) {
         case Z_STREAM_END:
@@ -270,26 +270,9 @@ namespace {
 #ifdef HAVE_BZLIB
 class BZip {
   public:
-    BZip(const void *base, std::size_t amount) {
+    static const std::size_t kSizeMax = static_cast<std::size_t>(std::numeric_limits<unsigned int>::max());
+    BZip() {
       memset(&stream_, 0, sizeof(stream_));
-      SetInput(base, amount);
-      HandleError(BZ2_bzDecompressInit(&stream_, 0, 0));
-    }
-
-    ~BZip() {
-      try {
-        HandleError(BZ2_bzDecompressEnd(&stream_));
-      } catch (const std::exception &e) {
-        std::cerr << e.what() << std::endl;
-        abort();
-      }
-    }
-
-    bool Process() {
-      int ret = BZ2_bzDecompress(&stream_);
-      if (ret == BZ_STREAM_END) return false;
-      HandleError(ret);
-      return true;
     }
 
     void SetOutput(void *base, std::size_t amount) {
@@ -313,10 +296,12 @@ class BZip {
     std::size_t AvailInput() const { return stream_.avail_in; }
     std::size_t AvailOutput() const { return stream_.avail_out; }
 
-  private:
+  protected:
     void HandleError(int value) {
       switch(value) {
         case BZ_OK:
+          return;
+        case BZ_RUN_OK:
           return;
         case BZ_CONFIG_ERROR:
           UTIL_THROW(BZException, "bzip2 seems to be miscompiled.");
@@ -335,6 +320,83 @@ class BZip {
 
     bz_stream stream_;
 };
+
+class BZipRead : public BZip {
+  public:
+    BZipRead(const void *base, std::size_t amount) : BZip() {
+      SetInput(base, amount);
+      HandleError(BZ2_bzDecompressInit(&stream_, 0, 0));
+    }
+
+    ~BZipRead() {
+      try {
+        HandleError(BZ2_bzDecompressEnd(&stream_));
+      } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        abort();
+      }
+    }
+
+    bool Process() {
+      int ret = BZ2_bzDecompress(&stream_);
+      if (ret == BZ_STREAM_END) return false;
+      HandleError(ret);
+      return true;
+    }
+};
+
+class BZipWrite : public BZip {
+  public:
+    explicit BZipWrite(int level) : level_(level) {
+      level_ = std::max<int>(level_, 1);
+      level_ = std::min<int>(level_, 9);
+      HandleError(BZ2_bzCompressInit(&stream_, level_, 0, 0));
+    }
+
+    ~BZipWrite() {
+      try {
+        HandleError(BZ2_bzCompressEnd(&stream_));
+      } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+        abort();
+      }
+    }
+
+    static const std::size_t kMinOutput = 1; /* seemingly no magic number? */
+
+    bool EnoughOutput() const {
+      return AvailOutput() >= kMinOutput;
+    }
+
+    void Process() {
+      HandleError(BZ2_bzCompress(&stream_, BZ_RUN));
+    }
+
+    // TODO flushing state
+    bool Finish() {
+      assert(stream_.avail_out);
+      int result = BZ2_bzCompress(&stream_, BZ_FINISH);
+      switch(result) {
+        case BZ_STREAM_END:
+          return true;
+        case BZ_FINISH_OK:
+          return false;
+        default:
+          HandleError(result);
+          UTIL_THROW(BZException, "Confused by bzip result " << result);
+      }
+    }
+
+    // TODO flushing state
+    void Reset() {
+      HandleError(BZ2_bzCompressEnd(&stream_));
+      HandleError(BZ2_bzCompressInit(&stream_, level_, 0, 0));
+    }
+
+  private:
+    int level_;
+};
+
 #endif // HAVE_BZLIB
 
 #ifdef HAVE_XZLIB
@@ -458,19 +520,19 @@ ReadBase *ReadFactory(int fd, uint64_t &raw_amount, const void *already_data, co
   switch (DetectMagic(&header[0], header.size())) {
     case UTIL_GZIP:
 #ifdef HAVE_ZLIB
-      return new StreamCompressed<GZipRead>(hold.release(), header.data(), header.size());
+      return new ReadStream<GZipRead>(hold.release(), header.data(), header.size());
 #else
       UTIL_THROW(CompressedException, "This looks like a gzip file but gzip support was not compiled in.");
 #endif
     case UTIL_BZIP:
 #ifdef HAVE_BZLIB
-      return new StreamCompressed<BZip>(hold.release(), &header[0], header.size());
+      return new ReadStream<BZipRead>(hold.release(), &header[0], header.size());
 #else
       UTIL_THROW(CompressedException, "This looks like a bzip file (it begins with BZh), but bzip support was not compiled in.");
 #endif
     case UTIL_XZIP:
 #ifdef HAVE_XZLIB
-      return new StreamCompressed<XZip>(hold.release(), header.data(), header.size());
+      return new ReadStream<XZip>(hold.release(), header.data(), header.size());
 #else
       UTIL_THROW(CompressedException, "This looks like an xz file, but xz support was not compiled in.");
 #endif
@@ -522,6 +584,119 @@ std::size_t ReadCompressed::ReadOrEOF(void *const to_in, std::size_t amount) {
   return to - reinterpret_cast<uint8_t*>(to_in);
 }
 
+WriteBase::WriteBase() {}
+WriteBase::~WriteBase() {}
+
+template <class Compressor> class WriteStream : public WriteBase {
+  public:
+    WriteStream(int out, int level = 9, std::size_t compressed_buffer = 4096)
+      : buf_size_(std::max<std::size_t>(Compressor::kMinOutput, compressed_buffer)),
+        buf_(buf_size_),
+        writer_(out),
+        dirty_(true /* Even if input is empty, generate a valid gzip file */),
+        compressor_(level) {
+      compressor_.SetOutput(buf_.get(), buf_size_);
+    }
+
+    void write(const void *data_void, std::size_t amount) {
+      const uint8_t *data = static_cast<const uint8_t*>(data_void);
+      /* Guard against maximum size */
+      for (; amount > Compressor::kSizeMax; data += Compressor::kSizeMax, amount -= Compressor::kSizeMax) {
+        write(data, Compressor::kSizeMax);
+      }
+
+      compressor_.SetInput(data, amount);
+      while (compressor_.AvailInput()) {
+        if (!compressor_.EnoughOutput()) {
+          writer_.write(buf_.get(), compressor_.NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+          compressor_.SetOutput(buf_.get(), buf_size_);
+        }
+        compressor_.Process();
+      }
+      dirty_ = true;
+    }  
+
+    void flush() {
+      if (!dirty_) return;
+      do {
+        if (!compressor_.EnoughOutput()) {
+          writer_.write(buf_.get(), compressor_.NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+          compressor_.SetOutput(buf_.get(), buf_size_);
+        }
+      } while (!compressor_.Finish());
+      if (compressor_.NextOutput() != buf_.get()) {
+        writer_.write(buf_.get(), compressor_.NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
+      }
+      writer_.flush();
+      compressor_.Reset();
+      compressor_.SetOutput(buf_.get(), buf_size_);
+      dirty_ = false; /* No need for an empty gzip after the first one */
+    }
+
+
+  private:
+    // Holding compressed data.
+    std::size_t buf_size_;
+    scoped_malloc buf_;
+
+    // TODO: generic Writer backend.
+    FileWriter writer_;
+
+    bool dirty_; // Do we have stuff to write to the file with flush?
+
+    Compressor compressor_;
+};
+
+class WriteUncompressed : public WriteBase {
+  public:
+    explicit WriteUncompressed(int out) : writer_(out) {}
+
+    void write(const void *data_void, std::size_t amount) {
+      writer_.write(data_void, amount);
+    }
+
+    void flush() { writer_.flush(); }
+
+  private:
+    FileWriter writer_;
+};
+
+WriteCompressed::WriteCompressed(int fd, WriteCompressed::Compression compression) {
+  switch (compression) {
+    case NONE:
+      backend_.reset(new WriteUncompressed(fd));
+      return;
+    case GZIP:
+#ifdef HAVE_ZLIB
+      backend_.reset(new WriteStream<GZipWrite>(fd));
+#else
+      UTIL_THROW(CompressedException, "gzip support not compiled in");
+#endif
+      return;
+    case BZIP:
+#ifdef HAVE_BZLIB
+      backend_.reset(new WriteStream<BZipWrite>(fd));
+#else
+      UTIL_THROW(CompressedException, "bzip support not compiled in");
+#endif
+      return;
+    case XZIP:
+      UTIL_THROW(CompressedException, "xzip writing not implemented yet");
+  }
+}
+
+WriteCompressed::~WriteCompressed() {
+  flush();
+}
+
+void WriteCompressed::write(const void *data_void, std::size_t amount) {
+  backend_->write(data_void, amount);
+}
+
+void WriteCompressed::flush() {
+  backend_->flush();
+}
+
 #ifdef HAVE_ZLIB
 namespace {
 
@@ -551,70 +726,9 @@ void GZCompress(StringPiece from, std::string &to, int level) {
   } while (!writer.Finish());
   to.resize(writer.NextOutput() - reinterpret_cast<const uint8_t*>(to.data()));
 }
-
-WriteCompressed::WriteCompressed(int out, int level, std::size_t compressed_buffer)
-  : buf_size_(std::max<std::size_t>(GZipWrite::kMinOutput, compressed_buffer)),
-    buf_(buf_size_),
-    compressor_(new GZipWrite(level)),
-    writer_(out),
-    dirty_(true /* Even if input is empty, generate a valid gzip file */) {
-  compressor_->SetOutput(buf_.get(), buf_size_);
-}
-
-WriteCompressed::~WriteCompressed() {
-  flush();
-}
-
-void WriteCompressed::write(const void *data_void, std::size_t amount) {
-  const uint8_t *data = static_cast<const uint8_t*>(data_void);
-  /* Guard against maximum size for gzip */
-  for (; amount > GZip::kSizeMax; data += GZip::kSizeMax, amount -= GZip::kSizeMax) {
-    write(data, GZip::kSizeMax);
-  }
-
-  compressor_->SetInput(data, amount);
-  while (compressor_->AvailInput()) {
-    if (!compressor_->EnoughOutput()) {
-      writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
-      compressor_->SetOutput(buf_.get(), buf_size_);
-    }
-    compressor_->Process();
-  }
-  dirty_ = true;
-}
-
-void WriteCompressed::flush() {
-  if (!dirty_) return;
-  do {
-    if (!compressor_->EnoughOutput()) {
-      writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
-      compressor_->SetOutput(buf_.get(), buf_size_);
-    }
-  } while (!compressor_->Finish());
-  if (compressor_->NextOutput() != buf_.get()) {
-    writer_.write(buf_.get(), compressor_->NextOutput() - reinterpret_cast<const uint8_t*>(buf_.get()));
-  }
-  writer_.flush();
-  compressor_->Reset();
-  compressor_->SetOutput(buf_.get(), buf_size_);
-  dirty_ = false; /* No need for an empty gzip after the first one */
-}
-
 #else
-class GZipWrite {};
-
-WriteCompressed::WriteCompressed(int, int, std::size_t) {
-  UTIL_THROW(CompressedException, "GZip support was not compiled in.");
-}
-WriteCompressed::~WriteCompressed() {}
-void WriteCompressed::write(const void *, std::size_t) {
-  UTIL_THROW(CompressedException, "GZip support was not compiled in.");
-}
-void WriteCompressed::flush() {
-  UTIL_THROW(CompressedException, "GZip support was not compiled in.");
-}
 void GZCompress(StringPiece, std::string &, int) {
-  UTIL_THROW(CompressedException, "GZip support was not compiled in.");
+  UTIL_THROW(CompressedException, "gzip not compiled in");
 }
 #endif
 

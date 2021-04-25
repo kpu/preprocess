@@ -89,13 +89,24 @@ class ReadCompressed {
     uint64_t raw_amount_;
 };
 
-class GZipWrite;
+class WriteBase {
+  public:
+    virtual ~WriteBase();
 
-/* Currently gzip only support. */
+    virtual void write(const void *data, std::size_t amount) = 0;
+
+    virtual void flush() = 0;
+ 
+  protected:
+    WriteBase();
+};
+
+/* Currently xzip is missing */
 class WriteCompressed {
   public:
+    enum Compression { NONE, GZIP, BZIP, XZIP };
     // Takes ownership of fd.
-    explicit WriteCompressed(int fd, int level = 9, std::size_t compressed_buffer = 4096);
+    explicit WriteCompressed(int fd, Compression compression);
 
     ~WriteCompressed();
 
@@ -104,15 +115,7 @@ class WriteCompressed {
     void flush();
 
   private:
-    // Holding compressed data.
-    std::size_t buf_size_;
-    scoped_malloc buf_;
-
-    scoped_ptr<GZipWrite> compressor_;
-    // TODO: generic Writer backend.
-    FileWriter writer_;
-
-    bool dirty_; // Do we have stuff to write to the file with flush?
+    scoped_ptr<WriteBase> backend_;
 };
 
 // Very basic gzip compression support.  Normally this would involve streams
