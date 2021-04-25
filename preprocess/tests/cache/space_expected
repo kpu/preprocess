@@ -1,0 +1,251 @@
+preprocess
+==========
+
+Pipelines for preprocessing corpora.
+
+Compile with cmake:
+```bash
+mkdir build
+cd build
+cmake ..
+make -j4
+```
+
+Paths are relative to the build directory.
+
+```bash
+bin/text.sh $language $lower
+```
+does all the tokenization and normalization for normal text that has already
+been extracted and sentence split.
+
+```bash
+bin/gigaword_unwrap
+```
+takes Gigaword XML files on stdin and outputs text with P tags intended
+to be used as input to the sentence splitter.  Also removes or normalizes many
+ad-hoc parenthesized expressions like (UNDERLINE) and consecutive duplicate
+lines.
+
+```bash
+moses/ems/support/split-sentences.perl -l $language
+```
+is the Moses/Europarl sentence splitter with a bugfix to also split sentences
+separated by two spaces.
+
+```bash
+bin/resplit.sh $language
+```
+preserves existing line breaks and introduces additional breaks when multiple sentences appear in the same line.  This is useful when you want to use the target side of parallel corpora for language modeling.
+
+
+```bash
+bin/gigaword_extract.sh $language
+```
+combines the unwrap and sentence split steps.
+
+```bash
+bin/dedupe
+```
+deduplicates text at the line level.
+
+```bash
+bin/cache slow_program slow_program_args...
+```
+Wraps a deterministic line-based program with a deduplicating cache.  The program should always write exactly one line for each line it reads.
+Example input:
+```
+Repeated line
+Some text
+Repeated line
+More text
+```
+The slow program will only see unique lines in its input:
+```
+Repeated line
+Some text
+More text
+```
+Suppose the slow program translates to French:
+```
+Ligne répétée
+Du texte
+Plus de texte
+```
+Then `cache` will reinsert the cached results for final output:
+```
+Ligne répétée
+Du texte
+Ligne répétée
+Plus de texte
+```
+
+```bash
+bin/shard $prefix $shard_count
+```
+Shards stdin into multiple files named prefix0 prefix1 prefix2 etc.  This is useful when the deduper above runs out of memory.
+
+```bash
+bin/remove_long_lines $length_limit
+```
+removes lines longer than the specified length in bytes.  The default is 2000 bytes.
+
+```bash
+bin/remove_invalid_utf8
+```
+removes lines longer than the specified length in bytes.  The default is 2000 bytes.
+
+```bash
+bin/select_latin
+```
+Removes lines that contain bad UTF8; contain control characters; have less than
+90% Latin, Common, or Inherited characters (except angle brackets); or have less
+than 50% Latin characters.  I used this for giga-fren.
+
+```bash
+bin/process_unicode -l $language [--flatten] [--normalize] [--lower]
+```
+Processes UTF8.
+
+* --lower lowercases
+* --lower lowercases
+* --lower lowercases
+
+```bash
+bin/heuristics.perl -l $language
+```
+A collection of substitution heuristics from various people.
+
+```bash
+moses/tokenizer/tokenizer.perl -l $language
+```
+The slow program will only see unique lines in its input:
+
+```bash
+bin/truecase --model $model
+```
+is the Moses/Europarl sentence splitter with a bugfix to also split sentences
+
+```bash
+xzcat $language.*.raw.xz |commoncrawl_dedupe /dev/null |xz >$language.deduped.xz
+```
+Process the CommonCrawl n-grams raw files into the deduped files:
+* --lower lowercases
+* --lower lowercases
+* --lower lowercases
+* --lower lowercases
+
+```bash
+zcat sentences.gz | b64filter program program-args | gzip -c > processed.gz
+```
+Wraps a deterministic line-based program with a deduplicating cache.  The program should always write exactly one line for each line it reads.
+process lines of text in such a way that it will always output an equal amount
+of lines as went into it. For example an MT system, or a tokenizer.
+
+```bash
+< long_sentences.txt foldfilter -w 1000 translate.sh > long_english_sentences.txt
+```
+
+Think of it as a wrapper version of [fold](https://linux.die.net/man/1/fold).
+
+Wrap an MT system that does not like long sentences and this tool chops those
+lines (assuming each line is a single sentence) temporarily into multiple lines.
+It uses some heuristics to determine where to break up lines, but if it can't
+find a good break point it will still just chop words in half.
+
+
+```
+Usage: foldfilter [ -w INT ] [ -d DELIMITERS ] [ -s ] command [ args ... ]
+
+Arguments:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+The slow program will only see unique lines in its input:
+could not be interpreted or an error occurred, i.e. invalid utf8 was passed in.
+
+**utf8 safe:** This tool won't break up unicode characters, and you can use
+unicode characters as delimiters.
+
+```bash
+docenc -d $INDICES sentences.gz
+```
+
+Bit like b64filter, but split into a decoding and an encoding process. Can be
+helpful constructing or debugging base64 encoded document collections. Accepts
+gzip-encoded input.
+
+```
+Usage: foldfilter [ -w INT ] [ -d DELIMITERS ] [ -s ] command [ args ... ]
+
+The slow program will only see unique lines in its input:
+You can specify multiple indices or ranges at once. The rest of the arguments
+are interpreted as files to encode/decode.
+
+Indices:
+
+
+
+Arguments:
+
+
+
+
+
+
+
+
+Modes:
+
+
+
+
+
+
+
+```
+
+I.e this will behave similarly:
+```
+docenc -d $INDICES sentences.gz
+```
+and
+```
+gzip -cd plain_text.gz | b64filter tr '[:lower:]' '[:upper:]' | docenc | gzip -c > loud_text.gz
+```
+
+Pretty similar to what can be achieved with something like the following set
+on a Linux machine using GNU base64 (Note: macOS base64 will not accept multiple
+lines):
+
+```
+zcat sentences.gz | b64filter program program-args | gzip -c > processed.gz
+```
+
+Mostly useful for debugging, but can also be useful to convert plain text into
+base64-encoded documents, i.e. converting single line html into multi-line
+documents:
+```
+cat lines_of_html.tsv \
+
+
+
+
+
+
+```

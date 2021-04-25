@@ -1,0 +1,4 @@
+set -eo pipefail
+CUR="$(dirname "$0")"
+BIN="${BIN:-"$CUR"/../../../build/bin}"
+TMP="$CUR"
