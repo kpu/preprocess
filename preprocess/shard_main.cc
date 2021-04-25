@@ -1,5 +1,5 @@
 #include "preprocess/fields.hh"
-#include "util/file_stream.hh"
+#include "util/buffered_stream.hh"
 #include "util/file_piece.hh"
 #include "util/fixed_array.hh"
 #include "util/murmur_hash.hh"
@@ -16,6 +16,7 @@ struct Options {
   std::vector<FieldRange> key_fields;
   char delim;
   std::vector<std::string> outputs;
+  util::WriteCompressed::Compression compression;
 };
 
 void ParseArgs(int argc, char *argv[], Options &out) {
@@ -23,6 +24,7 @@ void ParseArgs(int argc, char *argv[], Options &out) {
   po::options_description desc("Arguments");
   std::string fields;
   std::string prefix;
+  std::string compression_string;
   unsigned int number;
 
   desc.add_options()
@@ -31,7 +33,8 @@ void ParseArgs(int argc, char *argv[], Options &out) {
     ("delim,d", po::value(&out.delim)->default_value('\t'), "Field delimiter")
     ("prefix,p", po::value(&prefix), "Prefix and count of outputs")
     ("number,n", po::value(&number), "Number of shards")
-    ("output,o", po::value(&out.outputs)->multitoken(), "Output file names (or just list them without -o)");
+    ("output,o", po::value(&out.outputs)->multitoken(), "Output file names (or just list them without -o)")
+    ("compress,c", po::value(&compression_string)->default_value("none"), "Compression.  One of none, gzip, or bzip2");
 
   po::positional_options_description pd;
   pd.add("output", -1);
@@ -73,6 +76,15 @@ void ParseArgs(int argc, char *argv[], Options &out) {
     UTIL_THROW_IF2(vm.count("prefix"), "Specify --prefix or --output");
     UTIL_THROW_IF2(vm.count("number") && number != out.outputs.size(), "Number of outputs does not match");
   }
+  if (compression_string == "none") {
+    out.compression = util::WriteCompressed::NONE;
+  } else if (compression_string == "gzip") {
+    out.compression = util::WriteCompressed::GZIP;
+  } else if (compression_string == "bzip2") {
+    out.compression = util::WriteCompressed::BZIP;
+  } else {
+    UTIL_THROW(util::Exception, "Unknown compression algorithm " << compression_string);
+  }
 }
 
 } // namespace preprocess
@@ -84,10 +96,10 @@ int main(int argc, char *argv[]) {
 
   util::FilePiece in(0);
   util::StringPiece line;
-  util::FixedArray<util::FileStream> out(options.outputs.size());
+  util::FixedArray<util::BufferedStream<util::WriteCompressed> > out(options.outputs.size());
   std::string output(argv[1]);
   for (const std::string &o : options.outputs) {
-    out.push_back(util::CreateOrThrow(o.c_str()));
+    out.push_back(util::CreateOrThrow(o.c_str()), options.compression);
   }
   while (in.ReadLineOrEOF(line)) {
     preprocess::HashCallback cb;

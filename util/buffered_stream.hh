@@ -22,11 +22,12 @@ namespace util {
 
 template <class Writer> class BufferedStream : public FakeOStream<BufferedStream<Writer> > {
   public:
-    template <class WriterConstruct> explicit BufferedStream(WriterConstruct construct, std::size_t buffer_size = 8192)
-      : buf_(util::MallocOrThrow(std::max<std::size_t>(buffer_size, kToStringMaxBytes))),
+    const std::size_t kBufferSize = 8192;
+    template <typename... Args> explicit BufferedStream(Args&&... args)
+      : buf_(util::MallocOrThrow(std::max<std::size_t>(kBufferSize, kToStringMaxBytes))),
         current_(static_cast<char*>(buf_.get())),
-        end_(current_ + std::max<std::size_t>(buffer_size, kToStringMaxBytes)),
-        writer_(construct) {}
+        end_(current_ + std::max<std::size_t>(kBufferSize, kToStringMaxBytes)),
+        writer_(std::forward<Args>(args)...) {}
 
     /* The source of the move is left in an unusable state that can only be destroyed. */
 #if __cplusplus >= 201103L
