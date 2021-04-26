@@ -319,7 +319,7 @@ void FSyncIgnoreUnsupported(int fd) {
 #if !defined(_WIN32) && !defined(_WIN64)
   if (!fsync(fd)) return;
   // "fd is bound to a special file (e.g., a pipe, FIFO, or socket) which does not support synchronization."
-  if (errno == EROFS || errno == EINVAL) return;
+  if (errno == EROFS || errno == EINVAL || errno == ENOTSUP) return;
   UTIL_THROW_ARG(FDException, (fd), "while syncing fd " << fd);
 #endif
 }
