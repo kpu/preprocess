@@ -67,17 +67,15 @@ class Semaphore {
 
 
     void wait() {
-      while (true) {
-        switch (WaitForSingleObject(sem_, INFINITE)) {
-          case WAIT_OBJECT_0:
-            return;
-          case WAIT_ABANDONED:
-            UTIL_THROW(Exception, "A semaphore can't be abandoned, confused by Windows");
-          case WAIT_TIMEOUT:
-            continue;
-          case WAIT_FAILED:
-            UTIL_THROW(Exception, "Waiting on Semaphore failed " << GetLastError());
-        }
+      switch (WaitForSingleObject(sem_, INFINITE)) {
+        case WAIT_OBJECT_0:
+          return;
+        case WAIT_ABANDONED:
+          UTIL_THROW(Exception, "A semaphore can't be abandoned, confused by Windows");
+        case WAIT_TIMEOUT:
+          UTIL_THROW(Exception, "Timeout on an infinite wait?!");
+        case WAIT_FAILED:
+          UTIL_THROW(Exception, "Waiting on Semaphore failed " << GetLastError());
       }
     }
 
