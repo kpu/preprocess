@@ -5,9 +5,10 @@
 #include "util/tokenize_piece.hh"
 #include "util/utf8.hh"
 
+#include <unordered_map>
+
 #define BOOST_LEXICAL_CAST_ASSUME_C_LOCALE
 #include <boost/lexical_cast.hpp>
-#include <boost/unordered_map.hpp>
 
 namespace {
 void SplitLine(util::FilePiece &from, std::vector<util::StringPiece> &to) {
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]) {
   util::FilePiece align(argv[1]), source_file(argv[2]), target_file(argv[3]), model(argv[4]);
 
   util::MutableVocab vocab;
-  boost::unordered_map<uint64_t, uint32_t> best;
+  std::unordered_map<uint64_t, uint32_t> best;
   while (true) {
     uint64_t key;
     try {
@@ -84,7 +85,7 @@ int main(int argc, char *argv[]) {
       util::ToLower(target_words[second], lowered);
       util::StringPiece source(source_words[first]);
       uint64_t key = util::MurmurHash64A(lowered.data(), lowered.size(), util::MurmurHash64A(source.data(), source.size()));
-      boost::unordered_map<uint64_t, uint32_t>::const_iterator found = best.find(key);
+      std::unordered_map<uint64_t, uint32_t>::const_iterator found = best.find(key);
       if (found != best.end()) {
         target_words[second] = vocab.String(found->second);
       }

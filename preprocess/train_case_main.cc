@@ -5,8 +5,9 @@
 #include "util/tokenize_piece.hh"
 #include "util/utf8.hh"
 
+#include <unordered_map>
+
 #include <boost/lexical_cast.hpp>
-#include <boost/unordered_map.hpp>
 
 namespace {
 void SplitLine(util::FilePiece &from, std::vector<util::StringPiece> &to) {
@@ -28,7 +29,7 @@ class Recorder {
       util::FileStream out(1);
       for (Map::const_iterator i = map_.begin(); i != map_.end(); ++i) {
         out << boost::lexical_cast<std::string>(i->first);
-        for (boost::unordered_map<uint32_t, unsigned int>::const_iterator j = i->second.begin(); j != i->second.end(); ++j) {
+        for (std::unordered_map<uint32_t, unsigned int>::const_iterator j = i->second.begin(); j != i->second.end(); ++j) {
           out << '\t' << vocab_.String(j->first) << ' ' << j->second;
         }
         out << '\n';
@@ -41,7 +42,7 @@ class Recorder {
     std::string lowered_;
 
     // map_[hash(lowered_target, hash(cased_source))][cased_target] = count(cased_source, cased_target)
-    typedef boost::unordered_map<uint64_t, boost::unordered_map<uint32_t, unsigned int> > Map;
+    typedef std::unordered_map<uint64_t, std::unordered_map<uint32_t, unsigned int> > Map;
     Map map_;
 };
 
