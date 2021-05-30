@@ -69,8 +69,6 @@ class ICUStupidlyUses32BitIntegersException : public std::exception {
 
 bool IsUTF8(const StringPiece &text);
 
-bool IsPunctuation(const StringPiece &text);
-
 // TODO: Implement these in a way that doesn't botch Turkish.
 void ToLower(const StringPiece &in, std::string &out);
 

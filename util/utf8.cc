@@ -82,28 +82,6 @@ bool IsUTF8(const StringPiece &str) {
   return true;
 }
 
-bool IsPunctuation(const StringPiece &str) {
-  const char *cur = str.data();
-  const char *end = str.data() + str.size();
-  UChar32 character;
-
-  while (end - cur > kInt32Max) {
-    int32_t offset = 0;
-    U8_NEXT(cur, offset, kInt32Max, character);
-    if (character < 0) throw NotUTF8Exception(str);
-    if (!u_ispunct(character)) return false;
-    cur += offset;
-  }
-  while (end > cur) {
-    int32_t offset = 0;
-    U8_NEXT(cur, offset, end - cur, character);
-    if (character < 0) throw NotUTF8Exception(str);
-    if (!u_ispunct(character)) return false;
-    cur += offset;
-  }
-  return true;
-}
-
 namespace {
 class CaseMapWrap : boost::noncopyable {
   public:
