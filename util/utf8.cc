@@ -1,14 +1,8 @@
 #include "util/utf8.hh"
 
+#include "util/murmur_hash.hh"
 #include "util/scoped.hh"
 #include "util/string_piece.hh"
-#include "util/string_piece_hash.hh"
-
-#include <boost/scoped_array.hpp>
-#include <boost/scoped_ptr.hpp>
-#include <boost/thread/once.hpp>
-#include <boost/unordered_map.hpp>
-#include <boost/utility.hpp>
 
 #include <unicode/normlzr.h>
 #include <unicode/ucasemap.h>
@@ -19,6 +13,7 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <err.h>
@@ -83,11 +78,9 @@ bool IsUTF8(const StringPiece &str) {
 }
 
 namespace {
-class CaseMapWrap : boost::noncopyable {
+class CaseMapWrap {
   public:
-    CaseMapWrap() : case_map_(NULL) {}
-
-    void Init() {
+    CaseMapWrap() : case_map_(NULL) {
       UErrorCode err_csm = U_ZERO_ERROR;
       case_map_ = ucasemap_open(NULL, 0, &err_csm);
       if (U_FAILURE(err_csm)) {
@@ -108,27 +101,14 @@ class CaseMapWrap : boost::noncopyable {
     UCaseMap *case_map_;
 };
 
-CaseMapWrap kCaseMap;
-
-boost::once_flag CaseMapFlag = BOOST_ONCE_INIT;
-
-void InitCaseMap() {
-  kCaseMap.Init();
-}
-
-const UCaseMap *GetCaseMap() {
-  boost::call_once(CaseMapFlag, InitCaseMap);
-  return kCaseMap.Get();
-}
-
 } // namespace
 
 void ToLower(const StringPiece &in, std::string &out) {
   TODOLoopFor32Bit(in);
-  const UCaseMap *csm = GetCaseMap();
+  static const CaseMapWrap wrap;
   while (true) {
     UErrorCode err_lower = U_ZERO_ERROR;
-    size_t need = ucasemap_utf8ToLower(csm, &out[0], out.size(), in.data(), in.size(), &err_lower);
+    size_t need = ucasemap_utf8ToLower(wrap.Get(), &out[0], out.size(), in.data(), in.size(), &err_lower);
     if (err_lower == U_BUFFER_OVERFLOW_ERROR) {
       // Hopefully ensure convergence.
       out.resize(std::max(out.size(), need) + 10);
@@ -178,13 +158,10 @@ struct FlattenData {
     // Fallback if nothing in longer matches.
     UnicodeString character;
   };
-  boost::unordered_map<UChar32, Start> starts;
+  std::unordered_map<UChar32, Start> starts;
 };
 
 namespace {
-
-boost::scoped_ptr<boost::unordered_map<StringPiece, FlattenData> > kAllFlattenData;
-boost::once_flag kAllFlattenDataBuilt = BOOST_ONCE_INIT;
 
 struct ReplaceRule {
   const char *from, *to;
@@ -292,32 +269,48 @@ const ReplaceRule kReplaceForFrench[] = {
   //{"´", "'"},
 };
 
-void AllFlattenDataPopulate() {
-  kAllFlattenData.reset(new boost::unordered_map<StringPiece, FlattenData>());
-  // Quoting http://www.boost.org/doc/libs/1_42_0/doc/html/boost/unordered_map.html on insert: "Pointers and references to elements are never invalidated."
-  FlattenData &english = (*kAllFlattenData)["en"];
-  FlattenData &french = (*kAllFlattenData)["fr"];
-  FlattenData &german = (*kAllFlattenData)["de"];
-  FlattenData &spanish = (*kAllFlattenData)["es"];
-  FlattenData &czech = (*kAllFlattenData)["cz"];
+struct StringPieceHash {
+  size_t operator()(StringPiece str) const {
+    return util::MurmurHashNative(str.data(), str.size());
+  }
+};
 
-  // Get the general stuff.
-  AddToFlatten(kGeneralReplace, english);
-  french = english;
-  czech = english;
-  german = english;
-  spanish = english;
+struct AllFlattenData {
+  public:
+    AllFlattenData() {
+      // Quoting http://www.boost.org/doc/libs/1_42_0/doc/html/boost/unordered_map.html on insert: "Pointers and references to elements are never invalidated."
+      FlattenData &english = lang_map_["en"];
+      FlattenData &french = lang_map_["fr"];
+      FlattenData &german = lang_map_["de"];
+      FlattenData &spanish = lang_map_["es"];
+      FlattenData &czech = lang_map_["cs"];
 
-  AddToFlatten(kReplaceWithQuote, english);
-  AddToFlatten(kReplaceWithQuote, german);
-  AddToFlatten(kReplaceWithQuote, spanish);
+      // Get the general stuff.
+      AddToFlatten(kGeneralReplace, english);
+      french = english;
+      czech = english;
+      german = english;
+      spanish = english;
 
-  AddToFlatten(kReplaceForEnglishRightBoundary, english, true);
-  AddToFlatten(kReplaceForEnglish, english);
-  AddToFlatten(kReplaceForFrench, french);
-  // TODO: Czech quotes.  
-  (*kAllFlattenData)["cs"] = (*kAllFlattenData)["cz"];
-}
+      AddToFlatten(kReplaceWithQuote, english);
+      AddToFlatten(kReplaceWithQuote, german);
+      AddToFlatten(kReplaceWithQuote, spanish);
+
+      AddToFlatten(kReplaceForEnglishRightBoundary, english, true);
+      AddToFlatten(kReplaceForEnglish, english);
+      AddToFlatten(kReplaceForFrench, french);
+      // TODO: Czech quotes.  
+    }
+
+    const FlattenData &ForLanguage(StringPiece language) const {
+      std::unordered_map<StringPiece, FlattenData, StringPieceHash>::const_iterator i = lang_map_.find(language);
+      if (i == lang_map_.end()) throw UnsupportedLanguageException(language);
+      return i->second;
+    }
+
+  private:
+    std::unordered_map<StringPiece, FlattenData, StringPieceHash> lang_map_;
+};
 
 } // namespace
 
@@ -328,10 +321,8 @@ UnsupportedLanguageException::UnsupportedLanguageException(const StringPiece &la
 
 namespace {
 const FlattenData &LookupFlatten(const StringPiece &language) {
-  boost::call_once(kAllFlattenDataBuilt, AllFlattenDataPopulate);
-  boost::unordered_map<StringPiece, FlattenData>::const_iterator found = kAllFlattenData->find(language);
-  if (found == kAllFlattenData->end()) throw UnsupportedLanguageException(language);
-  return found->second;
+  static const AllFlattenData kAllFlattenData;
+  return kAllFlattenData.ForLanguage(language);
 }
 } // namespace
 
@@ -343,7 +334,7 @@ void Flatten::Apply(const UnicodeString &in, UnicodeString &out) const {
   for (int32_t i = 0; i < in.length();) {
     UChar32 character = in.char32At(i);
     assert(character > 0);
-    boost::unordered_map<UChar32, FlattenData::Start>::const_iterator entry(data_.starts.find(character));
+    std::unordered_map<UChar32, FlattenData::Start>::const_iterator entry(data_.starts.find(character));
     if (entry != data_.starts.end()) {
       const FlattenData::Start &start = entry->second;
       std::vector<FlattenData::LongReplace>::const_iterator j(start.longer.begin());

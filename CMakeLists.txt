@@ -63,8 +63,6 @@ endif()
 # We need boost
 find_package(Boost 1.41.0 REQUIRED COMPONENTS
   program_options
-  system
-  thread
   unit_test_framework
 )
 

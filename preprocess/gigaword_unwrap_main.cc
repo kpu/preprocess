@@ -1,11 +1,10 @@
 #include "util/file_piece.hh"
+#include "util/murmur_hash.hh"
 #include "util/string_piece.hh"
-#include "util/string_piece_hash.hh"
-
-#include <boost/unordered_map.hpp>
 
 #include <cstring>
 #include <iostream>
+#include <unordered_map>
 
 /* This extracts data from gigaword XML files.  It puts each <P>, <HEADLINE>,
  * and <DATELINE> on a line with a <P> after it.  This output format is
@@ -96,7 +95,15 @@ const char *nyt_parentheses[] = {
   "(STORY CAN END HERE. OPTIONAL 3RD TAKE FOLLOWS.)"
 };
 
-boost::unordered_map<util::StringPiece, const char *> nyt_parentheses_set;
+namespace {
+struct StringPieceHash {
+  size_t operator()(util::StringPiece str) const {
+    return util::MurmurHashNative(str.data(), str.size());
+  }
+};
+} // namespace
+
+std::unordered_map<util::StringPiece, const char *, StringPieceHash> nyt_parentheses_set;
 
 void CheckReplaceEntity(std::string &line, size_t pos, const char *pattern, char with) {
   if (!strncasecmp(line.c_str() + pos, pattern, strlen(pattern))) {
@@ -105,7 +112,7 @@ void CheckReplaceEntity(std::string &line, size_t pos, const char *pattern, char
 }
 
 void MungeLine(std::string &line) {
-  boost::unordered_map<util::StringPiece, const char *>::const_iterator found;
+  std::unordered_map<util::StringPiece, const char *, StringPieceHash>::const_iterator found;
   // Parenthesized stuff
   for (size_t pos = line.find('('); pos != std::string::npos;) {
     size_t right = line.find(')', pos + 1);
