@@ -1,4 +1,5 @@
 #include "util/utf8.hh"
+#include "util/utf8_icu.hh"
 
 #define BOOST_TEST_MODULE UTF8Test
 #include <boost/test/unit_test.hpp>
@@ -85,6 +86,20 @@ BOOST_AUTO_TEST_CASE(FailLarge) {
 BOOST_AUTO_TEST_CASE(IsUTF8Test) {
   BOOST_CHECK(IsUTF8("…œÆ5ôÆÐØôæðø"));
   BOOST_CHECK(!IsUTF8("…œ\xaaÆ5œÆ5ôÆÐØôæðø"));
+}
+
+BOOST_AUTO_TEST_CASE(Iterator) {
+  DecodeUTF8Range range("\ufeffﬁ«🤦a");
+  DecodeUTF8Iterator i = range.begin();
+  BOOST_CHECK(i != range.end());
+  BOOST_CHECK(!range.end());
+  BOOST_CHECK_EQUAL(0xfeff, *i++);
+  BOOST_CHECK_EQUAL(0xFB01, *i++);
+  BOOST_CHECK_EQUAL(0xAB, *i++);
+  BOOST_CHECK_EQUAL(0x1F926, *i++);
+  BOOST_CHECK_EQUAL('a', *i++);
+  BOOST_CHECK(!i);
+  BOOST_CHECK(i == range.end());
 }
 
 /* This has been tested but it uses > 2 GB virtual memory so isn't enabled by default. */

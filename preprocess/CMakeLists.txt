@@ -9,7 +9,6 @@ add_library(base64 STATIC base64.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
-  apply_case
   b64filter
   cache
   commoncrawl_dedupe
@@ -19,17 +18,23 @@ set(EXE_LIST
   gigaword_unwrap
   mmhsum
   order_independent_hash
-  process_unicode
   remove_invalid_utf8
   remove_long_lines
-  select_latin
   shard
   substitute
-  train_case
-  truecase
   vocab
   warc_parallel
 )
+
+set(ICU_EXE_LIST
+  apply_case
+  truecase
+  train_case
+  process_unicode
+  select_latin)
+if(USE_ICU)
+  set(EXE_LIST ${EXE_LIST} ${ICU_EXE_LIST})
+endif(USE_ICU)
 
 set(PREPROCESS_LIBS preprocess_util ${Boost_LIBRARIES} ${THREADS})
 
@@ -46,6 +51,12 @@ target_link_libraries(foldfilter ${PREPROCESS_LIBS} captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
+
+if(USE_ICU)
+  foreach(exe ${ICU_EXE_LIST})
+    target_link_libraries(${exe} preprocess_icu)
+  endforeach(exe)
+endif(USE_ICU)
 
 foreach(script text.sh gigaword_extract.sh resplit.sh unescape_html.perl heuristics.perl)
   configure_file(${script} ../bin/${script} COPYONLY)

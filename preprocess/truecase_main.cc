@@ -5,6 +5,7 @@
 #include "util/probing_hash_table.hh"
 #include "util/tokenize_piece.hh"
 #include "util/utf8.hh"
+#include "util/utf8_icu.hh"
 
 #include <string.h>
 

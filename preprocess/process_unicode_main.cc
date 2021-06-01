@@ -1,4 +1,5 @@
 #include "util/utf8.hh"
+#include "util/utf8_icu.hh"
 
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/parsers.hpp>

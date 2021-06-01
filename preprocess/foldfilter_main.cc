@@ -12,7 +12,6 @@
 #include "util/utf8.hh"
 #include "preprocess/captive_child.hh"
 
-
 namespace {
 
 constexpr size_t not_found = -1;
@@ -28,7 +27,7 @@ struct wrap_options {
 
 	// Order determines preference: the first one of these to occur in the
 	// line will determine the wrapping point.
-	std::vector<UChar32> delimiters{':', ',', ' ', '-', '.', '/'};
+	std::vector<char32_t> delimiters{':', ',', ' ', '-', '.', '/'};
 };
 
 struct program_options : wrap_options {
@@ -37,12 +36,10 @@ struct program_options : wrap_options {
 	char **child_argv = 0;
 };
 
-size_t find_delimiter(std::vector<UChar32> const &delimiters, UChar32 character) {
-	for (size_t i = 0; i < delimiters.size(); ++i)
-		if (character == delimiters[i])
-			return i;
-
-	return not_found;
+size_t find_delimiter(std::vector<char32_t> const &delimiters, char32_t character) {
+  std::vector<char32_t>::const_iterator i = std::find(delimiters.begin(), delimiters.end(), character);
+  if (i == delimiters.end()) return not_found;
+  return i - delimiters.begin();
 }
 
 std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util::StringPiece const &line, wrap_options const &options) {
@@ -51,28 +48,25 @@ std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util
 	std::deque<std::string> out_delimiters;
 
 	// Current byte position
-	int32_t pos = 0;
+	size_t pos = 0;
 
 	// Length of line in bytes
-	int32_t length = line.size();
+	size_t length = line.size();
 	
 	// Byte position of last cut-off point
-	int32_t pos_last_cut = 0;
+	size_t pos_last_cut = 0;
 
 	// For each delimiter the byte position of its last occurrence
-	std::vector<int32_t> pos_delimiters(options.delimiters.size(), 0);
+	std::vector<size_t> pos_delimiters(options.delimiters.size(), 0);
 
 	// Position of the first delimiter we encountered up to pos. Reset
 	// to pos + next char if it's not a delimiter.
 	int32_t pos_first_delimiter = 0;
 
 	while (pos < length) {
-		UChar32 character;
-
-		U8_NEXT(line.data(), pos, length, character);
-		
-		if (character < 0)
-			throw util::NotUTF8Exception(line);
+    size_t char_len;
+		char32_t character = util::DecodeUTF8(line.data() + pos, line.end(), &char_len);
+    pos += char_len;
 
 		size_t delimiter_idx = find_delimiter(options.delimiters, character);
 
@@ -88,11 +82,11 @@ std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util
 		}
 
 		// Do we need to introduce a break? If not, move to next character
-		if (pos - pos_last_cut < static_cast<int32_t>(options.column_width))
+		if (pos - pos_last_cut < options.column_width)
 			continue;
 
 		// Last resort if we didn't break on a delimiter: just chop where we are
-		int32_t pos_cut = pos;
+		size_t pos_cut = pos;
 
 		// Find a more ideal break point by looking back for a delimiter
 		for (int32_t const &pos_delimiter : pos_delimiters) {
@@ -103,21 +97,19 @@ std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util
 		}
 
 		// Assume we cut without delimiters (i.e. the last resort scenario)
-		int32_t pos_cut_end = pos_cut;
+		size_t pos_cut_end = pos_cut;
 
 		// Peek ahead to were after the cut we encounter our first not-a-delimiter
 		// because that's the point were we resume.
-		for (int32_t pos_next = pos_cut_end; pos_cut_end < length; pos_cut_end = pos_next) {
+		for (size_t pos_next = pos_cut_end; pos_cut_end < length; pos_cut_end = pos_next) {
 			// When we're not skipping delimiters, don't send more bytes than
 			// column_width in total a single line, even though we try to keep
 			// the delimiters together.
-			if (options.keep_delimiters_in_lines && pos_cut_end - pos_last_cut >= static_cast<int32_t>(options.column_width))
+			if (options.keep_delimiters_in_lines && pos_cut_end - pos_last_cut >= options.column_width)
 				break;
 
-			U8_NEXT(line.data(), pos_next, length, character);
-
-			if (character < 0)
-				throw util::NotUTF8Exception(line);
+      character = util::DecodeUTF8(line.data() + pos_next, line.end(), &char_len);
+      pos_next += char_len;
 
 			// First character after pos_cut is probably a delimiter, unless
 			// we did a hard stop in the middle of a word, and we're not keeping
@@ -158,23 +150,11 @@ int usage(char **argv) {
 	return 1;
 }
 
-std::vector<UChar32> parse_delimiters(char *value) {
-	int32_t length = strlen(value);
-	int32_t pos = 0;
-	
-	std::vector<UChar32> delimiters;
-	delimiters.reserve(length);
-
-	while (pos < length) {
-		UChar32 delimiter;
-		U8_NEXT(value, pos, length, delimiter);
-		
-		if (delimiter < 0)
-			throw util::NotUTF8Exception(value);
-		
-		delimiters.push_back(delimiter);
-	}
-
+std::vector<char32_t> parse_delimiters(char *value) {
+	std::vector<char32_t> delimiters;
+  for (char32_t c : util::DecodeUTF8Range(value)) {
+    delimiters.push_back(c);
+  }
 	return delimiters;
 }
 

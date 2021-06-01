@@ -4,6 +4,7 @@
 #include "util/mutable_vocab.hh"
 #include "util/tokenize_piece.hh"
 #include "util/utf8.hh"
+#include "util/utf8_icu.hh"
 
 #include <unordered_map>
 

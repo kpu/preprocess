@@ -66,11 +66,14 @@ if (NOT MSVC)
 endif()
 
 # Group these objects together for later use.
-add_library(preprocess_util ${PREPROCESS_UTIL_DOUBLECONVERSION_SOURCE} ${PREPROCESS_UTIL_STREAM_SOURCE} ${PREPROCESS_UTIL_SOURCE})
-target_link_libraries(preprocess_util ${Boost_LIBRARIES} ${COMPRESS_LIBS} ${ICU_LIBRARIES} ${THREADS} ${TIMER_LINK})
+add_library(preprocess_util ${PREPROCESS_UTIL_DOUBLECONVERSION_SOURCE} ${PREPROCESS_UTIL_SOURCE})
+target_link_libraries(preprocess_util ${Boost_LIBRARIES} ${COMPRESS_LIBS} ${THREADS} ${TIMER_LINK})
+
+add_library(preprocess_icu utf8_icu.cc)
+target_link_libraries(preprocess_icu preprocess_util ${ICU_LIBRARIES})
 
 # Only compile and run unit tests if tests should be run
-if(BUILD_TESTING)
+if(COMPILE_TESTS)
   set(PREPROCESS_BOOST_TESTS_LIST
     integer_to_string_test
     pcqueue_test
@@ -78,8 +81,11 @@ if(BUILD_TESTING)
     compress_test
     string_stream_test
     tokenize_piece_test
-    utf8_test
   )
+  if (USE_ICU)
+    set(PREPROCESS_BOOST_TESTS_LIST ${PREPROCESS_BOOST_TESTS_LIST} utf8_test)
+  endif(USE_ICU)
+
 
 # Adds a single test to the build, depending on the specified dependent
 # object files, linking against the specified libraries, and with the
@@ -146,4 +152,8 @@ endfunction()
   PreprocessAddTest(TEST file_piece_test
                LIBRARIES preprocess_util ${Boost_LIBRARIES} ${THREADS}
                TEST_ARGS ${CMAKE_CURRENT_SOURCE_DIR}/file_piece.cc)
+
+  if(USE_ICU)
+    target_link_libraries(utf8_test preprocess_icu)
+  endif(USE_ICU)
 endif()
