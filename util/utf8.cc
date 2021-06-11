@@ -10,7 +10,9 @@ NotUTF8Exception::~NotUTF8Exception() throw() {}
 
 bool IsUTF8(const StringPiece &str) {
   try {
-    for (char32_t codepoint : DecodeUTF8Range(str)) {}
+    for (char32_t character : DecodeUTF8Range(str)) {
+      (void)character; /*unused variable */
+    }
     return true;
   } catch (NotUTF8Exception) {
     return false;
