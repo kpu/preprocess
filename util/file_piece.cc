@@ -218,6 +218,7 @@ template <class T> T FilePiece::ReadNumber() {
   SkipSpaces();
   while (last_space_ < position_) {
     if (UTIL_UNLIKELY(at_end_)) {
+      if (position_ == position_end_) throw EndOfFileException();
       // Hallucinate a null off the end of the file.
       std::string buffer(position_, position_end_);
       T ret;
