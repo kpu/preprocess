@@ -91,15 +91,18 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
   QueueEntry q;
   while (queue.Consume(q).value) {
     util::StringPiece &value = *q.value;
-    if (!value.data()) {
-      // New entry, not cached.
-      util::StringPiece got = in.ReadLine();
-      // Allocate memory to store a copy of the line.
-      char *copy_to = (char*)string_pool.Allocate(got.size());
-      memcpy(copy_to, got.data(), got.size());
-      value = util::StringPiece(copy_to, got.size());
+    try {
+      if (!value.data()) {
+        // New entry, not cached.
+        StringPiece got = in.ReadLine();
+        // Allocate memory to store a copy of the line.
+        char *copy_to = (char *) string_pool.Allocate(got.size());
+        memcpy(copy_to, got.data(), got.size());
+        value = StringPiece(copy_to, got.size());
+      }
+      out << value << '\n';
     }
-    out << value << '\n';
+    catch (const util::EndOfFileException& e){}
   }
 }
 
