@@ -94,11 +94,11 @@ void Output(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proc
     try {
       if (!value.data()) {
         // New entry, not cached.
-        StringPiece got = in.ReadLine();
+        util::StringPiece got = in.ReadLine();
         // Allocate memory to store a copy of the line.
         char *copy_to = (char *) string_pool.Allocate(got.size());
         memcpy(copy_to, got.data(), got.size());
-        value = StringPiece(copy_to, got.size());
+        value = util::StringPiece(copy_to, got.size());
       }
       out << value << '\n';
     }
