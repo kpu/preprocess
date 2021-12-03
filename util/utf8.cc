@@ -14,7 +14,7 @@ bool IsUTF8(const StringPiece &str) {
       (void)character; /*unused variable */
     }
     return true;
-  } catch (NotUTF8Exception) {
+  } catch (const NotUTF8Exception &) {
     return false;
   }
 }
