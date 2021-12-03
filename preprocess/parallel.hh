@@ -5,13 +5,17 @@
 #include "util/file_piece.hh"
 
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <stdint.h>
 
-template <class Pass> int FilterParallel(int argc, char **argv) {
+namespace preprocess {
+
+template <class Pass, class... PassArguments> int FilterParallel(const std::vector<std::string> &files, PassArguments&&... pass_construct) {
   uint64_t input = 0, output = 0;
-  if (argc == 1) {
-    Pass pass;
+  if (files.empty()) {
+    Pass pass(std::forward<PassArguments>(pass_construct)...);
     util::StringPiece line;
     util::FilePiece in(0, NULL, &std::cerr);
     util::FileStream out(1);
@@ -25,11 +29,11 @@ template <class Pass> int FilterParallel(int argc, char **argv) {
         ++output;
       }
     }
-  } else if (argc == 5) {
-    Pass pass0, pass1;
+  } else if (files.size() == 4) {
+    Pass pass0(std::forward<PassArguments>(pass_construct)...), pass1(std::forward<PassArguments>(pass_construct)...);
     util::StringPiece line0, line1;
-    util::FilePiece in0(argv[1], &std::cerr), in1(argv[2]);
-    util::FileStream out0(util::CreateOrThrow(argv[3])), out1(util::CreateOrThrow(argv[4]));
+    util::FilePiece in0(files[0].c_str(), &std::cerr), in1(files[1].c_str());
+    util::FileStream out0(util::CreateOrThrow(files[2].c_str())), out1(util::CreateOrThrow(files[3].c_str()));
     while (true) {
       try {
         line0 = in0.ReadLine();
@@ -44,17 +48,18 @@ template <class Pass> int FilterParallel(int argc, char **argv) {
     }
     try {
       line1 = in1.ReadLine();
-      std::cerr << "Input is not balaced: " << argv[2] << " has " << line1 << std::endl;
+      std::cerr << "Input is not balaced: " << files[1] << " has " << line1 << std::endl;
       return 2;
     } catch (const util::EndOfFileException &e) {}
   } else {
     std::cerr << 
-      "To filter one file, run\n" << argv[0] << " <stdin >stdout\n"
-      "To filter parallel files, run\n" << argv[0] << " in0 in1 out0 out1\n";
+      "To filter from stdin to stdout, run without an argument.\n"
+      "To filter parallel files, run in0 in1 out0 out1\n";
     return 1;
   }
   std::cerr << "Kept " << output << " / " << input << " = " << (static_cast<float>(output) / static_cast<float>(input)) << std::endl;
   return 0;
 }
 
+} // namespace preprocess
 #endif
