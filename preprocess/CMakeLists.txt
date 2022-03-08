@@ -10,6 +10,7 @@ add_library(base64 STATIC base64.cc)
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
   b64filter
+  base64_number
   cache
   commoncrawl_dedupe
   dedupe
@@ -32,7 +33,9 @@ set(ICU_EXE_LIST
   truecase
   train_case
   process_unicode
-  select_latin)
+  select_latin
+  simple_cleaning
+  )
 if(USE_ICU)
   set(EXE_LIST ${EXE_LIST} ${ICU_EXE_LIST})
 endif(USE_ICU)
@@ -46,11 +49,13 @@ foreach(exe ${EXE_LIST})
 endforeach(exe)
 
 target_link_libraries(b64filter ${PREPROCESS_LIBS} base64 captive_child)
+target_link_libraries(base64_number ${PREPROCESS_LIBS} base64 captive_child)
 target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(dedupe ${PREPROCESS_LIBS} fields)
 target_link_libraries(docenc ${PREPROCESS_LIBS} base64)
 target_link_libraries(foldfilter ${PREPROCESS_LIBS} captive_child)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
+target_link_libraries(simple_cleaning ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
 

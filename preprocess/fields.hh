@@ -26,23 +26,25 @@ void ParseFields(const char *arg, std::vector<FieldRange> &indices);
 void DefragmentFields(std::vector<FieldRange> &indices);
 
 // Do a callback with each individual field that was selected.
-template <class Functor> inline void IndividualFields(util::StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
+template <class Functor> inline bool IndividualFields(util::StringPiece str, const std::vector<FieldRange> &indices, char delim, Functor &callback) {
   const char *begin = str.data();
   const char *const end = str.data() + str.size();
   unsigned int index = 0;
   for (const FieldRange f : indices) {
     for (; index < f.begin; ++index) {
       begin = std::find(begin, end, delim) + 1;
-      if (begin >= end) return;
+      if (begin >= end) return true;
     }
     for (; index < f.end; ++index) {
       const char *found = std::find(begin, end, delim);
-      callback(util::StringPiece(begin, found - begin));
+      if (!callback(util::StringPiece(begin, found - begin))) {
+        return false;
+      }
       begin = found + 1;
-      if (begin >= end) return;
+      if (begin >= end) return true;
     }
   }
-  return;
+  return true;
 }
 
 // Do a callback with ranges of fields.
