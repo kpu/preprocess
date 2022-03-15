@@ -96,11 +96,16 @@ bin/remove_invalid_utf8
 removes lines with invalid UTF-8
 
 ```bash
-bin/select_latin
+bin/simple_cleaning
 ```
-Removes lines that contain bad UTF8; contain control characters; have less than
-90% Latin, Common, or Inherited characters (except angle brackets); or have less
-than 50% Latin characters.  I used this for giga-fren.
+Removes lines with:
+* Invalid UTF-8
+* Control characters (except tab and newline)
+* Less than `--min-chars` as measured in codepoints
+* Consecutive runs of `--character-run` or more of the same non-space character
+* Too many Common and Inherited Unicode script characters (like numbers)
+* Too much or too little punctuation
+* Too little in the expected script
 
 ```bash
 bin/process_unicode -l $language [--flatten] [--normalize] [--lower]

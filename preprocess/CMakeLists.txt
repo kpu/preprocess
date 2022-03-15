@@ -33,7 +33,6 @@ set(ICU_EXE_LIST
   truecase
   train_case
   process_unicode
-  select_latin
   simple_cleaning
   )
 if(USE_ICU)
