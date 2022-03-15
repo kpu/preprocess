@@ -16,6 +16,7 @@
 #include <string.h>
 #include <unicode/uchar.h>
 #include <unicode/uscript.h>
+#include <unicode/errorcode.h>
 
 namespace preprocess {
 namespace {
@@ -36,15 +37,19 @@ struct Options {
 };
 
 void ScriptStringsToCodes(const std::vector<std::string> &str, std::vector<UScriptCode> &code) {
+  // Older ICU doesn't like null pointer to determine the size of uscript_getCode output.
+  UScriptCode empty;
   for (const std::string &s : str) {
     UErrorCode err = U_ZERO_ERROR;
-    int32_t required = uscript_getCode(s.c_str(), nullptr, 0, &err);
+    int32_t required = uscript_getCode(s.c_str(), &empty, 0, &err);
     if (err != U_BUFFER_OVERFLOW_ERROR) {
       if (err == U_ZERO_ERROR) {
         std::cerr << "Could not map \"" << s << "\" to a script.  See https://unicode-org.github.io/icu-docs/apidoc/released/icu4c/uscript_8h.html" << std::endl;
         abort();
       }
-      std::cerr << "Got unexpected error " << err << " while interpreting script code " << s << std::endl;
+      icu::ErrorCode interpret;
+      interpret.set(err);
+      std::cerr << "Got unexpected error " << interpret.errorName() << " while interpreting script code " << s << std::endl;
       abort();
     }
     code.resize(code.size() + required);
