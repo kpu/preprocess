@@ -27,6 +27,10 @@ class Exception : public std::exception {
         const char *child_name,
         const char *condition);
 
+
+  protected:
+    StringStream what_;
+
   private:
     template <class Except, class Data> friend typename Except::template ExceptionTag<Except&>::Identity operator<<(Except &e, const Data &data);
 
@@ -34,8 +38,6 @@ class Exception : public std::exception {
     template <class T> struct ExceptionTag {
       typedef T Identity;
     };
-
-    StringStream what_;
 };
 
 /* This implements the normal operator<< for Exception and all its children.

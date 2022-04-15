@@ -5,7 +5,7 @@ project(preprocess)
 
 #Set for FindICU.cmake
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 # Compile all executables into bin/
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

@@ -2,9 +2,13 @@
 
 #include "warcstream.hh"
 #include "util/file_stream.hh"
+#include "util/file_piece.hh"
 #include "util/murmur_hash.hh"
+#include "util/pool.hh"
 #include "util/tokenize_piece.hh"
 
+#include <charconv>
+#include <exception>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -12,30 +16,66 @@
 #include <curl/curl.h>
 #include <string.h>
 
-class MatchException : public util::Exception {};
+class MatchException : public util::Exception {
+  public:
+    void SetLocation(const char *file, unsigned int line, const char *func, const char * /*child_name*/, const char *condition) {
+      std::string old_text;
+      what_.swap(old_text);
+      what_ << file << ':' << line << '\t';
+      if (func) what_ << func;
+      what_ << '\t';
+      if (condition) what_ << condition;
+      what_ << '\t';
+      what_ << old_text;
+    }
+};
+
+class Output {
+  public:
+    explicit Output(const char *failure_log) : success_(1), failure_(util::CreateOrThrow(failure_log)) {}
+
+    void Success(util::StringPiece original_line, util::StringPiece paragraph) {
+      success_ << original_line << '\t' << paragraph << '\n';
+    }
+    void Failure(util::StringPiece original_line, util::StringPiece what) {
+      failure_ << original_line << '\t' << what << '\n';
+    }
+
+  private:
+    util::FileStream success_, failure_;
+};
 
 struct Extract {
   // Raw line number in the WET
   uint64_t paragraph_number;
   // XXH3_64bits_withSeed of line in the WET
   uint64_t paragraph_digest;
-  // XXH3_64bits_withSeed after sentence splitting / preprocesing the line.
-  uint64_t sentence_digest;
-  float lid_score;
-  float laser_score;
-  // File to write to (side of a parallel corpus)
-  util::FileStream *out;
-  // Line number in final parallel corpus.
-  uint64_t out_line_number;
+
+  util::StringPiece original_line;
 };
 
-void ProcessExtract(const Extract &extract, util::StringPiece line) {
+void ProcessExtract(const Extract &extract, util::StringPiece line, Output &out) {
   if (!line.empty() && line[line.size() - 1] == '\r') {
     line.remove_suffix(1);
   }
   XXH64_hash_t hash = XXH3_64bits_withSeed(line.data(), line.size(), 0);
-  UTIL_THROW_IF(hash != extract.paragraph_digest, MatchException, "Paragraph '" << line << "' hashed to " << hash << " but the metadata expected " << extract.paragraph_digest);
-  (*extract.out) << extract.out_line_number << ' ' << extract.sentence_digest << ' ' << extract.lid_score << ' ' << extract.laser_score << ' ' << line << '\n';
+  if (hash == extract.paragraph_digest) {
+    out.Success(extract.original_line, line);
+    return;
+  }
+  // Apparently the pipeline replaces | with _.
+  if (line.find('|') != util::StringPiece::npos) {
+    std::string copy(line.data(), line.size());
+    std::replace(copy.begin(), copy.end(), '|', '_');
+    hash = XXH3_64bits_withSeed(copy.data(), copy.size(), 0);
+    if (hash == extract.paragraph_digest) {
+      out.Success(extract.original_line, copy);
+      return;
+    }
+  }
+  util::StringStream stream;
+  stream << "Paragraph '" << line << "' hashed to " << hash << " but the metadata expected " << extract.paragraph_digest;
+  out.Failure(extract.original_line, stream.str());
 }
 
 struct SHA1 {
@@ -58,6 +98,10 @@ class Retrieve {
   public:
     typedef std::unordered_map<SHA1, std::vector<Extract> >::iterator Iterator;
 
+    void Clear() {
+      map_.clear();
+    }
+
     void Add(util::StringPiece sha1, const Extract &extract) {
       UTIL_THROW_IF(sha1.size() != 32, MatchException, "Expected 32-character hash but got '" << sha1 << "' with size " << sha1.size());
       const SHA1 &key = *reinterpret_cast<const SHA1*>(sha1.data());
@@ -76,7 +120,8 @@ class Retrieve {
       map_.erase(it);
     }
 
-    Iterator End() { return map_.end(); }
+    Iterator begin() { return map_.begin(); }
+    Iterator end() { return map_.end(); }
 
   private:
     const std::vector<Extract> empty_;
@@ -99,13 +144,13 @@ util::StringPiece FindSHA1(util::TokenIter<util::SingleCharacter, false> &line) 
   }
 }
 
-void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::vector<Extract> &extracts) {
+void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::vector<Extract> &extracts, Output &out) {
   assert(!extracts.empty());
   uint64_t line_counter = 0;
   std::vector<Extract>::const_iterator extract = extracts.begin();
   for (++line; line; ++line_counter, ++line) {
     while (line_counter == extract->paragraph_number) {
-      ProcessExtract(*extract, *line);
+      ProcessExtract(*extract, *line, out);
       if (++extract == extracts.end()) {
         return;
       }
@@ -116,7 +161,7 @@ void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::
 
 class DocumentCallback {
   public:
-    explicit DocumentCallback(Retrieve &retrieve) : retrieve_(retrieve) {}
+    DocumentCallback(Retrieve &retrieve, Output &out) : retrieve_(retrieve), out_(out) {}
 
     void operator()(const std::string &document) {
       util::TokenIter<util::SingleCharacter, false> line(document, '\n');
@@ -128,7 +173,7 @@ class DocumentCallback {
       }
       util::StringPiece sha1 = FindSHA1(line);
       Retrieve::Iterator it = retrieve_.Lookup(sha1);
-      if (it == retrieve_.End()) return;
+      if (it == retrieve_.end()) return;
       const std::vector<Extract> &extracts = it->second;
       assert(!extracts.empty());
       // Consume rest of the header.
@@ -136,45 +181,144 @@ class DocumentCallback {
         UTIL_THROW_IF(!line, MatchException, "Missing end of header");
         if (line->size() == 1 && (*line)[0] == '\r') break;
       }
-      MatchLines(line, extracts);
+      MatchLines(line, extracts, out_);
       retrieve_.Success(it);
     }
   private:
     Retrieve &retrieve_;
+    Output &out_;
 };
 
 class CurlCallback {
   public:
-    CurlCallback(Retrieve &retrieve) : document_(retrieve) {}
+    CurlCallback(Retrieve &retrieve, Output &out) : document_(retrieve, out) {}
 
     size_t operator()(void *buffer, size_t length) {
-      warc_.GiveBytes(static_cast<const char*>(buffer), length, document_);
+      // As a C library, curl can't handle exceptions thrown by the callback.
+      try {
+        warc_.GiveBytes(static_cast<const char*>(buffer), length, document_);
+      } catch (...) {
+        exception_ = std::current_exception();
+        return 0;
+      }
       return length;
     }
 
+    void CheckException() {
+      if (exception_) {
+        std::exception_ptr moved(std::move(exception_));
+        std::rethrow_exception(moved);
+      }
+    }
+  private:
+    preprocess::WARCStream warc_;
+    DocumentCallback document_;
+    std::exception_ptr exception_;
+};
+
+class CurlWrap {
+  public:
+    CurlWrap() : curl_(curl_easy_init()) {
+      UTIL_THROW_IF(!curl_, MatchException, "Failed to initialize CURL");
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_ERRORBUFFER, error_buffer_), MatchException, "CURL Setting error buffer failed");
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, 1L), MatchException, "CURL Setting follow location failed " << error_buffer_);
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, FunctionPtr), MatchException, "CURL Setting function failed " << error_buffer_);
+    }
+
+    ~CurlWrap() {
+      curl_easy_cleanup(curl_);
+    }
+
+    void Download(const char *url, CurlCallback &callback) {
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_URL, url), MatchException, "CURL Could not set URL " << error_buffer_);
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &callback), MatchException, "CURL Could not set callback " << error_buffer_);
+      CURLcode performed = curl_easy_perform(curl_);
+      callback.CheckException();
+      if (CURLE_OK == performed) return;
+      UTIL_THROW(MatchException, "CURL perform failed " << error_buffer_);
+    }
+
+  private:
     static size_t FunctionPtr(void *buffer, size_t /* one */, size_t nmemb, void *ptr) {
       return (*static_cast<CurlCallback*>(ptr))(buffer, nmemb);
     }
 
-  private:
-    preprocess::WARCStream warc_;
-    DocumentCallback document_;
+    CURL *curl_;
+
+    char error_buffer_[CURL_ERROR_SIZE];
+
 };
 
-int main() {
-  Retrieve retrieve;
-  util::FileStream file(1);
-  retrieve.Add("VGOLEON3MW757B2FHQ5SMBY6EQQ5QHQW", Extract {36, 16658339799244853606ULL, 16658339799244853606ULL, 0.80266, 1.0559655, &file, 814970});
-  CurlCallback callback(retrieve);
-  CURL *curl = curl_easy_init();
-  curl_easy_setopt(curl, CURLOPT_URL, "http://data.commoncrawl.org/crawl-data/CC-MAIN-2017-04/segments/1484560279169.4/wet/CC-MAIN-20170116095119-00057-ip-10-171-10-70.ec2.internal.warc.wet.gz");
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlCallback::FunctionPtr);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &callback);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  curl_easy_perform(curl);
-  curl_easy_cleanup(curl);
-/*  while (std::cin.read(buf, 1024)) {
-    stream.GiveBytes(buf, std::cin.gcount(), callback);
-  }*/
+void ParseLine(util::StringPiece line, util::StringPiece &wet_path, util::StringPiece &sha1, Extract &extract) {
+  util::TokenIter<util::SingleCharacter, false> spaces(line, ' ');
+  UTIL_THROW_IF2(!spaces, "Metadata missing");
+  wet_path = *spaces;
+  UTIL_THROW_IF2(!++spaces, "Metadata missing sha1");
+  UTIL_THROW_IF2(!spaces->starts_with("sha1:"), "Expected hash starting with sha1");
+  sha1 = *spaces;
+  sha1.remove_prefix(5);
+  UTIL_THROW_IF2(!++spaces, "Metadata missing URL");
+  UTIL_THROW_IF2(!++spaces, "Metadata missing line");
+  std::from_chars_result r = std::from_chars(spaces->data(), spaces->data() + spaces->size(), extract.paragraph_number, 10);
+  UTIL_THROW_IF2(r.ec != std::errc(), "Error in number " << *spaces);
+  UTIL_THROW_IF2(r.ptr != spaces->end(), "Did not consume full number " << *spaces);
+  UTIL_THROW_IF2(!++spaces, "Metadata missing paragraph digest");
+  r = std::from_chars(spaces->data(), spaces->end(), extract.paragraph_digest);
+  UTIL_THROW_IF2(r.ec != std::errc(), "Error in number " << *spaces);
+  UTIL_THROW_IF2(r.ptr != spaces->end(), "Did not consume full number " << *spaces);
+}
 
+void RunWARC(const char *url, CurlWrap &curl, Retrieve &retrieve, Output &out) {
+  try {
+    CurlCallback callback(retrieve, out);
+    curl.Download(url, callback);
+  } catch (const MatchException &e) {
+    for (Retrieve::Iterator i = retrieve.begin(); i != retrieve.end(); ++i) {
+      for (const Extract &extract : i->second) {
+        out.Failure(extract.original_line, e.what());
+      }
+    }
+    return;
+  }
+  for (Retrieve::Iterator i = retrieve.begin(); i != retrieve.end(); ++i) {
+    for (const Extract &extract : i->second) {
+      out.Failure(extract.original_line, "No error but unmatched");
+    }
+  }
+}
+
+void ProcessMetadata(const util::StringPiece download_prefix, util::FilePiece &in, Output &out) {
+  Retrieve retrieve;
+  util::Pool string_pool;
+  CurlWrap curl;
+  util::StringPiece previous_wet_path;
+  std::string download_path(download_prefix.data(), download_prefix.size());
+  for (util::StringPiece line : in) {
+    util::StringPiece wet_path, sha1;
+    Extract extract;
+    ParseLine(line, wet_path, sha1, extract);
+    if (wet_path != previous_wet_path) {
+      // Flush existing data.
+      if (!previous_wet_path.empty()) {
+        download_path.replace(download_prefix.size(), download_path.size() - download_prefix.size(), previous_wet_path.data(), previous_wet_path.size());
+        RunWARC(download_path.c_str(), curl, retrieve, out);
+      }
+      retrieve.Clear();
+      string_pool.FreeAll();
+    }
+    // Store the full string line for use in printing later.
+    extract.original_line = util::StringPiece(static_cast<const char*>(memcpy(string_pool.Allocate(line.size()), line.data(), line.size())), line.size());
+    previous_wet_path = util::StringPiece(extract.original_line.data() + (wet_path.data() - line.data()), wet_path.size());
+    retrieve.Add(sha1, extract);
+  }
+  if (!previous_wet_path.empty()) {
+    download_path.replace(download_prefix.size(), download_path.size() - download_prefix.size(), previous_wet_path.data(), previous_wet_path.size());
+    RunWARC(download_path.c_str(), curl, retrieve, out);
+  }
+}
+
+int main() {
+  util::FilePiece in(0, "stdin", &std::cerr, 4096);
+  Output out("failure");
+  ProcessMetadata("http://data.commoncrawl.org/", in, out);
 }
