@@ -11,7 +11,6 @@ add_library(fields STATIC fields.cc)
 add_library(captive_child STATIC captive_child.cc)
 add_library(warc STATIC warc.cc)
 add_library(base64 STATIC base64.cc)
-add_library(warcreader STATIC warcreader.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
@@ -64,7 +63,7 @@ target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(simple_cleaning ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
-target_link_libraries(wet_lines ${PREPROCESS_LIBS} warcreader xxHash::xxhash)
+target_link_libraries(wet_lines ${PREPROCESS_LIBS} xxHash::xxhash)
 
 if(USE_ICU)
   foreach(exe ${ICU_EXE_LIST})

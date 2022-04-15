@@ -5,7 +5,6 @@ util/string_piece.hh and util/string_piece.cc are Google code.
 util/file.cc contains a modified implementation of mkstemp under the LGPL.
 FindICU.cmake is under BSD-2 clause license.
 util/utf8.hh contains Google code under Apache-2.0.
-preprocess/warcreader.hh and preprocess/warcreader.cc are under the MIT license.
 
 For the rest:
 

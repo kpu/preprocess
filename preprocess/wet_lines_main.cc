@@ -1,6 +1,6 @@
 #include "xxhash.h"
 
-#include "warcreader.hh"
+#include "warcstream.hh"
 #include "util/file_stream.hh"
 #include "util/murmur_hash.hh"
 #include "util/tokenize_piece.hh"
@@ -106,33 +106,42 @@ void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::
   UTIL_THROW(MatchException, "Paragraph number " << extract->paragraph_number << " exceeds size.")
 }
 
-void ProcessWARC(warc2text::WARCReader &reader, Retrieve &retrieve) {
-  std::string str;
-  UTIL_THROW_IF(!reader.getRecord(str), MatchException, "Missing warcinfo");
-  const char kStart[] = "WARC/1.0\r\nWARC-Type: warcinfo\r\n";
-  UTIL_THROW_IF(strncmp(str.c_str(), kStart, sizeof(kStart) - 1), MatchException, "WARC does not begin with warcinfo");
-  while (reader.getRecord(str)) {
-    util::TokenIter<util::SingleCharacter, false> line(str, '\n');
-    UTIL_THROW_IF(!line, MatchException, "Blank document");
-    UTIL_THROW_IF(*line != "WARC/1.0\r", MatchException, "Expected WARC/1.0 header but got `" << *line << '\'');
-    util::StringPiece sha1 = FindSHA1(line);
-    const std::vector<Extract> &extracts = retrieve.Lookup(sha1);
-    if (extracts.empty()) {
-      continue;
+class DocumentCallback {
+  public:
+    explicit DocumentCallback(Retrieve &retrieve) : retrieve_(retrieve) {}
+
+    void operator()(const std::string &document) {
+      const char kWARCInfo[] = "WARC/1.0\r\nWARC-Type: warcinfo\r\n";
+      if (!strncmp(document.c_str(), kWARCInfo, sizeof(kWARCInfo) - 1)) {
+        return;
+      }
+      util::TokenIter<util::SingleCharacter, false> line(document, '\n');
+      UTIL_THROW_IF(!line, MatchException, "Blank document");
+      UTIL_THROW_IF(*line != "WARC/1.0\r", MatchException, "Expected WARC/1.0 header but got `" << *line << '\'');
+      util::StringPiece sha1 = FindSHA1(line);
+      const std::vector<Extract> &extracts = retrieve_.Lookup(sha1);
+      if (extracts.empty()) {
+        return;
+      }
+      // Consume rest of the header.
+      for (++line; ; ++line) {
+        UTIL_THROW_IF(!line, MatchException, "Missing end of header");
+        if (line->size() == 1 && (*line)[0] == '\r') break;
+      }
+      MatchLines(line, extracts);
     }
-    // Consume rest of the header.
-    for (++line; ; ++line) {
-      UTIL_THROW_IF(!line, MatchException, "Missing end of header");
-      if (line->size() == 1 && (*line)[0] == '\r') break;
-    }
-    MatchLines(line, extracts);
-  }
-}
+  private:
+    Retrieve &retrieve_;
+};
 
 int main() {
   Retrieve retrieve;
   util::FileStream file(1);
   retrieve.Add("VGOLEON3MW757B2FHQ5SMBY6EQQ5QHQW", Extract {36, 16658339799244853606ULL, 16658339799244853606ULL, 0.80266, 1.0559655, &file, 814970});
-  warc2text::WARCReader reader("/dev/stdin");
-  ProcessWARC(reader, retrieve);
+  DocumentCallback callback(retrieve);
+  char buf[1024];
+  preprocess::WARCStream stream;
+  while (std::cin.read(buf, 1024)) {
+    stream.GiveBytes(buf, std::cin.gcount(), callback);
+  }
 }
