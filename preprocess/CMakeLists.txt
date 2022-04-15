@@ -2,10 +2,16 @@ if (NOT MSVC)
 	set(THREADS pthread)
 endif()
 
+option(BUILD_SHARED_LIBS "Build shared libs" OFF)
+set(XXHASH_BUILD_ENABLE_INLINE_API OFF)
+set(XXHASH_BUILD_XXHSUM OFF)
+add_subdirectory(xxHash/cmake_unofficial xxHash/build/ EXCLUDE_FROM_ALL)
+
 add_library(fields STATIC fields.cc)
 add_library(captive_child STATIC captive_child.cc)
 add_library(warc STATIC warc.cc)
 add_library(base64 STATIC base64.cc)
+add_library(warcreader STATIC warcreader.cc)
 
 # Explicitly list the executable files to be compiled
 set(EXE_LIST
@@ -26,6 +32,7 @@ set(EXE_LIST
   substitute
   vocab
   warc_parallel
+  wet_lines
 )
 
 set(ICU_EXE_LIST
@@ -57,6 +64,7 @@ target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(simple_cleaning ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
 target_link_libraries(warc_parallel ${PREPROCESS_LIBS} warc captive_child)
+target_link_libraries(wet_lines ${PREPROCESS_LIBS} warcreader xxHash::xxhash)
 
 if(USE_ICU)
   foreach(exe ${ICU_EXE_LIST})
