@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <curl/curl.h>
 #include <string.h>
 
 class MatchException : public util::Exception {};
@@ -55,6 +56,8 @@ template<> struct hash<SHA1> {
 
 class Retrieve {
   public:
+    typedef std::unordered_map<SHA1, std::vector<Extract> >::iterator Iterator;
+
     void Add(util::StringPiece sha1, const Extract &extract) {
       UTIL_THROW_IF(sha1.size() != 32, MatchException, "Expected 32-character hash but got '" << sha1 << "' with size " << sha1.size());
       const SHA1 &key = *reinterpret_cast<const SHA1*>(sha1.data());
@@ -62,13 +65,18 @@ class Retrieve {
       UTIL_THROW_IF2(!extracts.empty() && extracts.back().paragraph_number > extract.paragraph_number, "Metadata should be sorted by paragraph number in each document");
       extracts.push_back(extract);
     }
-    const std::vector<Extract> &Lookup(util::StringPiece sha1) const {
+
+    Iterator Lookup(util::StringPiece sha1) {
       UTIL_THROW_IF(sha1.size() != 32, MatchException, "Expected 32-character hash but got '" << sha1 << "' with size " << sha1.size());
       const SHA1 &key = *reinterpret_cast<const SHA1*>(sha1.data());
-      std::unordered_map<SHA1, std::vector<Extract> >::const_iterator it = map_.find(key);
-      if (it == map_.end()) return empty_;
-      return it->second;
+      return map_.find(key);
     }
+
+    void Success(Iterator it) {
+      map_.erase(it);
+    }
+
+    Iterator End() { return map_.end(); }
 
   private:
     const std::vector<Extract> empty_;
@@ -79,7 +87,7 @@ class Retrieve {
 util::StringPiece FindSHA1(util::TokenIter<util::SingleCharacter, false> &line) {
   const util::StringPiece kBlockDigest("WARC-Block-Digest: sha1:");
   // Header through SHA1
-  for (++line; ; ++line) {
+  for (; ; ++line) {
     UTIL_THROW_IF(!line, MatchException, "Missing end of header");
     if (line->starts_with(kBlockDigest)) {
       UTIL_THROW_IF((*line)[line->size() - 1] != '\r', MatchException, "Expected carriage return in WARC.");
@@ -111,37 +119,62 @@ class DocumentCallback {
     explicit DocumentCallback(Retrieve &retrieve) : retrieve_(retrieve) {}
 
     void operator()(const std::string &document) {
-      const char kWARCInfo[] = "WARC/1.0\r\nWARC-Type: warcinfo\r\n";
-      if (!strncmp(document.c_str(), kWARCInfo, sizeof(kWARCInfo) - 1)) {
-        return;
-      }
       util::TokenIter<util::SingleCharacter, false> line(document, '\n');
       UTIL_THROW_IF(!line, MatchException, "Blank document");
       UTIL_THROW_IF(*line != "WARC/1.0\r", MatchException, "Expected WARC/1.0 header but got `" << *line << '\'');
-      util::StringPiece sha1 = FindSHA1(line);
-      const std::vector<Extract> &extracts = retrieve_.Lookup(sha1);
-      if (extracts.empty()) {
+      UTIL_THROW_IF(!++line, MatchException, "Nothing after WARC/1.0 header");
+      if (*line == "WARC-Type: warcinfo\r") {
         return;
       }
+      util::StringPiece sha1 = FindSHA1(line);
+      Retrieve::Iterator it = retrieve_.Lookup(sha1);
+      if (it == retrieve_.End()) return;
+      const std::vector<Extract> &extracts = it->second;
+      assert(!extracts.empty());
       // Consume rest of the header.
       for (++line; ; ++line) {
         UTIL_THROW_IF(!line, MatchException, "Missing end of header");
         if (line->size() == 1 && (*line)[0] == '\r') break;
       }
       MatchLines(line, extracts);
+      retrieve_.Success(it);
     }
   private:
     Retrieve &retrieve_;
+};
+
+class CurlCallback {
+  public:
+    CurlCallback(Retrieve &retrieve) : document_(retrieve) {}
+
+    size_t operator()(void *buffer, size_t length) {
+      warc_.GiveBytes(static_cast<const char*>(buffer), length, document_);
+      return length;
+    }
+
+    static size_t FunctionPtr(void *buffer, size_t /* one */, size_t nmemb, void *ptr) {
+      return (*static_cast<CurlCallback*>(ptr))(buffer, nmemb);
+    }
+
+  private:
+    preprocess::WARCStream warc_;
+    DocumentCallback document_;
 };
 
 int main() {
   Retrieve retrieve;
   util::FileStream file(1);
   retrieve.Add("VGOLEON3MW757B2FHQ5SMBY6EQQ5QHQW", Extract {36, 16658339799244853606ULL, 16658339799244853606ULL, 0.80266, 1.0559655, &file, 814970});
-  DocumentCallback callback(retrieve);
-  char buf[1024];
-  preprocess::WARCStream stream;
-  while (std::cin.read(buf, 1024)) {
+  CurlCallback callback(retrieve);
+  CURL *curl = curl_easy_init();
+  curl_easy_setopt(curl, CURLOPT_URL, "http://data.commoncrawl.org/crawl-data/CC-MAIN-2017-04/segments/1484560279169.4/wet/CC-MAIN-20170116095119-00057-ip-10-171-10-70.ec2.internal.warc.wet.gz");
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlCallback::FunctionPtr);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &callback);
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+  curl_easy_perform(curl);
+  curl_easy_cleanup(curl);
+/*  while (std::cin.read(buf, 1024)) {
     stream.GiveBytes(buf, std::cin.gcount(), callback);
-  }
+  }*/
+
 }
