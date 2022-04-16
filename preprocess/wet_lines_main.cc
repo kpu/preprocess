@@ -55,26 +55,25 @@ struct Extract {
 };
 
 void ProcessExtract(const Extract &extract, util::StringPiece line, Output &out) {
-  if (!line.empty() && line[line.size() - 1] == '\r') {
-    line.remove_suffix(1);
-  }
   XXH64_hash_t hash = XXH3_64bits_withSeed(line.data(), line.size(), 0);
   if (hash == extract.paragraph_digest) {
     out.Success(extract.original_line, line);
     return;
   }
-  // Apparently the pipeline replaces | with _.
-  if (line.find('|') != util::StringPiece::npos) {
-    std::string copy(line.data(), line.size());
-    std::replace(copy.begin(), copy.end(), '|', '_');
-    hash = XXH3_64bits_withSeed(copy.data(), copy.size(), 0);
-    if (hash == extract.paragraph_digest) {
-      out.Success(extract.original_line, copy);
-      return;
-    }
+  std::string normalized;
+  // The pipeline replaces | with _ and whitespace with ' '
+  std::transform(line.begin(), line.end(), std::back_inserter(normalized), [](char c) {
+        if (util::kSpaces[(unsigned char)c]) return ' ';
+        if (c == '|') return '_';
+        return c;
+      });
+  XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
+  if (norm_hash == extract.paragraph_digest) {
+    out.Success(extract.original_line, normalized);
+    return;
   }
   util::StringStream stream;
-  stream << "Paragraph '" << line << "' hashed to " << hash << " but the metadata expected " << extract.paragraph_digest;
+  stream << "Paragraph '" << line << "' hashed to " << hash << " while the normalized form '" << normalized << "' hashed to " << norm_hash << " but the metadata expected " << extract.paragraph_digest;
   out.Failure(extract.original_line, stream.str());
 }
 
@@ -144,17 +143,32 @@ util::StringPiece FindSHA1(util::TokenIter<util::SingleCharacter, false> &line) 
   }
 }
 
+util::StringPiece Strip(const util::StringPiece &in) {
+  util::StringPiece str(in);
+  while (!str.empty() && util::kSpaces[(unsigned char)str[0]]) {
+    str.remove_prefix(1);
+  }
+  while (!str.empty() && util::kSpaces[(unsigned char)str[str.size() - 1]]) {
+    str.remove_suffix(1);
+  }
+  return str;
+}
+
 void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::vector<Extract> &extracts, Output &out) {
   assert(!extracts.empty());
   uint64_t line_counter = 0;
   std::vector<Extract>::const_iterator extract = extracts.begin();
-  for (++line; line; ++line_counter, ++line) {
+  for (++line; line; ++line) {
+    // Upstream does python strip() then skips empty lines without counting them.
+    util::StringPiece stripped = Strip(*line);
+    if (stripped.empty()) continue;
     while (line_counter == extract->paragraph_number) {
-      ProcessExtract(*extract, *line, out);
+      ProcessExtract(*extract, stripped, out);
       if (++extract == extracts.end()) {
         return;
       }
     }
+    ++line_counter;
   }
   UTIL_THROW(MatchException, "Paragraph number " << extract->paragraph_number << " exceeds size.")
 }
