@@ -54,6 +54,27 @@ struct Extract {
   util::StringPiece original_line;
 };
 
+// The pipeline replaces | with _ and whitespace with ' '
+struct Normalize {
+  constexpr Normalize() : kMap() {
+    for (int i = 0; i < 256; ++i) {
+      kMap[i] = static_cast<char>(i);
+    }
+    kMap['|'] = '_';
+    kMap['\n'] = ' ';
+    kMap['\r'] = ' ';
+    kMap['\t'] = ' ';
+    kMap['\v'] = ' ';
+    kMap['\f'] = ' ';
+  }
+  char operator()(char in) const {
+    return kMap[(unsigned)in];
+  }
+  char kMap[256];
+};
+
+static constexpr Normalize kNormalize;
+
 void ProcessExtract(const Extract &extract, util::StringPiece line, Output &out) {
   XXH64_hash_t hash = XXH3_64bits_withSeed(line.data(), line.size(), 0);
   if (hash == extract.paragraph_digest) {
@@ -61,19 +82,17 @@ void ProcessExtract(const Extract &extract, util::StringPiece line, Output &out)
     return;
   }
   std::string normalized;
-  // The pipeline replaces | with _ and whitespace with ' '
-  std::transform(line.begin(), line.end(), std::back_inserter(normalized), [](char c) {
-        if (util::kSpaces[(unsigned char)c]) return ' ';
-        if (c == '|') return '_';
-        return c;
-      });
+  std::transform(line.begin(), line.end(), std::back_inserter(normalized), kNormalize);
   XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
   if (norm_hash == extract.paragraph_digest) {
     out.Success(extract.original_line, normalized);
     return;
   }
   util::StringStream stream;
-  stream << "Paragraph '" << line << "' hashed to " << hash << " while the normalized form '" << normalized << "' hashed to " << norm_hash << " but the metadata expected " << extract.paragraph_digest;
+  stream << "Paragraph '" << line << "' with hash " << hash;
+  if (normalized != line) {
+    stream << " normalized as '" << normalized << "' with hash " << norm_hash << " but the metadata expected " << extract.paragraph_digest;
+  }
   out.Failure(extract.original_line, stream.str());
 }
 
