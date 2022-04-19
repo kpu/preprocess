@@ -39,7 +39,7 @@ void Exception::SetLocation(const char *file, unsigned int line, const char *fun
   if (condition) {
     what_ << " because `" << condition << '\'';
   }
-  what_ << ".\n";
+  what_ << ". ";
   what_ << old_text;
 }
 

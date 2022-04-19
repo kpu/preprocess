@@ -95,7 +95,7 @@ class Retrieve {
 
 class Output {
   public:
-    explicit Output(const char *failure_log) : success_(1), failure_(util::CreateOrThrow(failure_log)) {}
+    Output() : success_(1), failure_(2) {}
 
     void Success(util::StringPiece original_line, util::StringPiece paragraph) {
       success_ << original_line << '\t' << paragraph << '\n';
@@ -357,7 +357,7 @@ void RunWARC(const char *url, CurlWrap &curl, Retrieve &retrieve, Output &out) {
   try {
     CurlCallback callback(retrieve, out);
     curl.Download(url, callback);
-  } catch (const MatchException &e) {
+  } catch (const Exception &e) {
     for (Retrieve::Iterator i = retrieve.begin(); i != retrieve.end(); ++i) {
       for (const Extract &extract : i->second) {
         out.Failure(extract.original_line, e.what());
@@ -403,7 +403,7 @@ void ProcessMetadata(const util::StringPiece download_prefix, util::FilePiece &i
 }
 
 int main() {
-  util::FilePiece in(0, "stdin", &std::cerr, 4096);
-  Output out("failure");
+  util::FilePiece in(0);
+  Output out;
   ProcessMetadata("http://data.commoncrawl.org/", in, out);
 }
