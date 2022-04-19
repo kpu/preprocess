@@ -156,27 +156,34 @@ util::StringPiece Strip(const util::StringPiece &in) {
 }
 
 void FallbackHashTable(util::TokenIter<util::SingleCharacter, false> &line, std::vector<Extract>::const_iterator extract, std::vector<Extract>::const_iterator extract_end, Output &out) {
-  std::unordered_multimap<uint64_t, const Extract*> lookup;
+  // Did not use a unordered_multimap due to the need to preserve order for error messages.
+  std::unordered_map<uint64_t, std::vector<const Extract*> > lookup;
   for (; extract != extract_end; ++extract) {
-    lookup.insert(std::pair<const uint64_t, const Extract*>(extract->paragraph_digest, &*extract));
+    lookup[extract->paragraph_digest].push_back(&*extract);
   }
   std::string normalized;
   for (; line; ++line) {
-    Normalize(*line, normalized);
-    XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
-    auto range = lookup.equal_range(norm_hash);
-    for (auto i = range.first; i != range.second; ++i) {
-      out.Success(i->second->original_line, normalized);
+    // Fun fact: python text mode considers a lone '\r' without "\r\n" as a line separator, presumably for Mac OS 9 compabilility.
+    for (util::TokenIter<util::SingleCharacter, true> carriage(*line, '\r'); carriage; ++carriage) {
+      Normalize(*carriage, normalized);
+      XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
+      auto found = lookup.find(norm_hash);
+      if (found == lookup.end()) continue;
+      for (const Extract *ext : found->second) {
+        out.Success(ext->original_line, normalized);
+      }
+      lookup.erase(found);
     }
-    lookup.erase(range.first, range.second);
     if (lookup.empty()) return;
   }
   // Failed to match the lines in lookup.
   util::StringStream message;
-  for (std::pair<const uint64_t, const Extract*> &entry : lookup) {
-    message.clear();
-    message << "Hash " << entry.first << " did not match any line in the WET";
-    out.Failure(entry.second->original_line, message.str());
+  for (std::pair<const uint64_t, std::vector<const Extract*> > &entry : lookup) {
+    for (const Extract *ext : entry.second) {
+      message.clear();
+      message << "Hash " << ext->paragraph_digest << " did not match any line in the WET";
+      out.Failure(ext->original_line, message.str());
+    }
   }
 }
 
@@ -201,7 +208,8 @@ void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::
     }
     ++line_counter;
   }
-  UTIL_THROW(MatchException, "Paragraph number " << extract->paragraph_number << " exceeds size.")
+  // Paragraph number exceeds number of lines.
+  FallbackHashTable(line_start, extract, extracts.end(), out);
 }
 
 // Extract SHA1 from header, leave at line
