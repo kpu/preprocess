@@ -16,6 +16,7 @@
 #include <curl/curl.h>
 #include <string.h>
 
+// Thrown for errors finding a match that can mostly r
 class MatchException : public util::Exception {
   public:
     void SetLocation(const char *file, unsigned int line, const char *func, const char * /*child_name*/, const char *condition) {
@@ -30,21 +31,6 @@ class MatchException : public util::Exception {
     }
 };
 
-class Output {
-  public:
-    explicit Output(const char *failure_log) : success_(1), failure_(util::CreateOrThrow(failure_log)) {}
-
-    void Success(util::StringPiece original_line, util::StringPiece paragraph) {
-      success_ << original_line << '\t' << paragraph << '\n';
-    }
-    void Failure(util::StringPiece original_line, util::StringPiece what) {
-      failure_ << original_line << '\t' << what << '\n';
-    }
-
-  private:
-    util::FileStream success_, failure_;
-};
-
 struct Extract {
   // Raw line number in the WET
   uint64_t paragraph_number;
@@ -53,48 +39,6 @@ struct Extract {
 
   util::StringPiece original_line;
 };
-
-// The pipeline replaces | with _ and whitespace with ' '
-struct Normalize {
-  constexpr Normalize() : kMap() {
-    for (int i = 0; i < 256; ++i) {
-      kMap[i] = static_cast<char>(i);
-    }
-    kMap['|'] = '_';
-    kMap['\n'] = ' ';
-    kMap['\r'] = ' ';
-    kMap['\t'] = ' ';
-    kMap['\v'] = ' ';
-    kMap['\f'] = ' ';
-  }
-  char operator()(char in) const {
-    return kMap[(unsigned)in];
-  }
-  char kMap[256];
-};
-
-static constexpr Normalize kNormalize;
-
-void ProcessExtract(const Extract &extract, util::StringPiece line, Output &out) {
-  XXH64_hash_t hash = XXH3_64bits_withSeed(line.data(), line.size(), 0);
-  if (hash == extract.paragraph_digest) {
-    out.Success(extract.original_line, line);
-    return;
-  }
-  std::string normalized;
-  std::transform(line.begin(), line.end(), std::back_inserter(normalized), kNormalize);
-  XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
-  if (norm_hash == extract.paragraph_digest) {
-    out.Success(extract.original_line, normalized);
-    return;
-  }
-  util::StringStream stream;
-  stream << "Paragraph '" << line << "' with hash " << hash;
-  if (normalized != line) {
-    stream << " normalized as '" << normalized << "' with hash " << norm_hash << " but the metadata expected " << extract.paragraph_digest;
-  }
-  out.Failure(extract.original_line, stream.str());
-}
 
 struct SHA1 {
   char base32[32];
@@ -146,6 +90,120 @@ class Retrieve {
     std::unordered_map<SHA1, std::vector<Extract> > map_;
 };
 
+
+class Output {
+  public:
+    explicit Output(const char *failure_log) : success_(1), failure_(util::CreateOrThrow(failure_log)) {}
+
+    void Success(util::StringPiece original_line, util::StringPiece paragraph) {
+      success_ << original_line << '\t' << paragraph << '\n';
+    }
+    void Failure(util::StringPiece original_line, util::StringPiece what) {
+      failure_ << original_line << '\t' << what << '\n';
+    }
+
+  private:
+    util::FileStream success_, failure_;
+};
+
+void Normalize(const util::StringPiece in, std::string &out) {
+  // '|' goes to '_', '\t' goes to ' ', and '\r' to empty string.
+  out.clear();
+  for (char i : in) {
+    switch (i) {
+      case '|':
+        out.push_back('_');
+        break;
+      case '\t':
+        out.push_back(' ');
+        break;
+      case '\r':
+        break;
+      default:
+        out.push_back(i);
+    }
+  }
+}
+
+bool ProcessExtract(const Extract &extract, util::StringPiece line, Output &out) {
+  // First try with just the line as-is.
+  XXH64_hash_t hash = XXH3_64bits_withSeed(line.data(), line.size(), 0);
+  if (hash == extract.paragraph_digest) {
+    out.Success(extract.original_line, line);
+    return true;
+  }
+  // Then try normalizing the string.
+  std::string normalized;
+  Normalize(line, normalized);
+  XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
+  if (norm_hash == extract.paragraph_digest) {
+    out.Success(extract.original_line, normalized);
+    return true;
+  }
+  // Didn't match, let's fall back to matching regardless of line number.
+  return false;
+}
+
+util::StringPiece Strip(const util::StringPiece &in) {
+  util::StringPiece str(in);
+  while (!str.empty() && util::kSpaces[(unsigned char)str[0]]) {
+    str.remove_prefix(1);
+  }
+  while (!str.empty() && util::kSpaces[(unsigned char)str[str.size() - 1]]) {
+    str.remove_suffix(1);
+  }
+  return str;
+}
+
+void FallbackHashTable(util::TokenIter<util::SingleCharacter, false> &line, std::vector<Extract>::const_iterator extract, std::vector<Extract>::const_iterator extract_end, Output &out) {
+  std::unordered_multimap<uint64_t, const Extract*> lookup;
+  for (; extract != extract_end; ++extract) {
+    lookup.insert(std::pair<const uint64_t, const Extract*>(extract->paragraph_digest, &*extract));
+  }
+  std::string normalized;
+  for (; line; ++line) {
+    Normalize(*line, normalized);
+    XXH64_hash_t norm_hash = XXH3_64bits_withSeed(normalized.data(), normalized.size(), 0);
+    auto range = lookup.equal_range(norm_hash);
+    for (auto i = range.first; i != range.second; ++i) {
+      out.Success(i->second->original_line, normalized);
+    }
+    lookup.erase(range.first, range.second);
+    if (lookup.empty()) return;
+  }
+  // Failed to match the lines in lookup.
+  util::StringStream message;
+  for (std::pair<const uint64_t, const Extract*> &entry : lookup) {
+    message.clear();
+    message << "Hash " << entry.first << " did not match any line in the WET";
+    out.Failure(entry.second->original_line, message.str());
+  }
+}
+
+void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::vector<Extract> &extracts, Output &out) {
+  util::TokenIter<util::SingleCharacter, false> line_start(line);
+  assert(!extracts.empty());
+  uint64_t line_counter = 0;
+  std::vector<Extract>::const_iterator extract = extracts.begin();
+  for (; line; ++line) {
+    // Upstream does python strip() then skips empty lines without counting them.
+    util::StringPiece stripped = Strip(*line);
+    if (stripped.empty()) continue;
+    while (line_counter == extract->paragraph_number) {
+      if (!ProcessExtract(*extract, stripped, out)) {
+        // A line failed to match the expected hash.  Fall back to a hash join of all lines.
+        FallbackHashTable(line_start, extract, extracts.end(), out);
+        return;
+      }
+      if (++extract == extracts.end()) {
+        return;
+      }
+    }
+    ++line_counter;
+  }
+  UTIL_THROW(MatchException, "Paragraph number " << extract->paragraph_number << " exceeds size.")
+}
+
 // Extract SHA1 from header, leave at line
 util::StringPiece FindSHA1(util::TokenIter<util::SingleCharacter, false> &line) {
   const util::StringPiece kBlockDigest("WARC-Block-Digest: sha1:");
@@ -162,36 +220,7 @@ util::StringPiece FindSHA1(util::TokenIter<util::SingleCharacter, false> &line) 
   }
 }
 
-util::StringPiece Strip(const util::StringPiece &in) {
-  util::StringPiece str(in);
-  while (!str.empty() && util::kSpaces[(unsigned char)str[0]]) {
-    str.remove_prefix(1);
-  }
-  while (!str.empty() && util::kSpaces[(unsigned char)str[str.size() - 1]]) {
-    str.remove_suffix(1);
-  }
-  return str;
-}
-
-void MatchLines(util::TokenIter<util::SingleCharacter, false> &line, const std::vector<Extract> &extracts, Output &out) {
-  assert(!extracts.empty());
-  uint64_t line_counter = 0;
-  std::vector<Extract>::const_iterator extract = extracts.begin();
-  for (++line; line; ++line) {
-    // Upstream does python strip() then skips empty lines without counting them.
-    util::StringPiece stripped = Strip(*line);
-    if (stripped.empty()) continue;
-    while (line_counter == extract->paragraph_number) {
-      ProcessExtract(*extract, stripped, out);
-      if (++extract == extracts.end()) {
-        return;
-      }
-    }
-    ++line_counter;
-  }
-  UTIL_THROW(MatchException, "Paragraph number " << extract->paragraph_number << " exceeds size.")
-}
-
+// The WARC reader calls this for every document in the WARC.
 class DocumentCallback {
   public:
     DocumentCallback(Retrieve &retrieve, Output &out) : retrieve_(retrieve), out_(out) {}
@@ -214,6 +243,7 @@ class DocumentCallback {
         UTIL_THROW_IF(!line, MatchException, "Missing end of header");
         if (line->size() == 1 && (*line)[0] == '\r') break;
       }
+      ++line; // Skip blank.
       MatchLines(line, extracts, out_);
       retrieve_.Success(it);
     }

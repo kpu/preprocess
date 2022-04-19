@@ -25,6 +25,8 @@ class StringStream : public FakeOStream<StringStream> {
 
     void swap(std::string &str) { std::swap(out_, str); }
 
+    void clear() { out_.clear(); }
+
   protected:
     friend class FakeOStream<StringStream>;
     char *Ensure(std::size_t amount) {
