@@ -23,7 +23,7 @@ class WARCStream {
       }
     }
 
-    template <class Callback> void GiveBytes(const char *data, std::size_t size, Callback &callback) {
+    template <class Callback> bool GiveBytes(const char *data, std::size_t size, Callback &callback) {
       z_.avail_in = size;
       // zlib shouldn't be messing with input
       z_.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(data));
@@ -39,10 +39,11 @@ class WARCStream {
         if (ret == Z_OK) {
           continue;
         }
-        callback(document_);
+        if (!callback(document_)) return false;
         document_.clear();
         UTIL_THROW_IF2(inflateReset(&z_) != Z_OK, "zlib inflateReset failed");
       }
+      return true;
     }
 
   private:

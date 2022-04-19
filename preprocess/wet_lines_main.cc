@@ -78,9 +78,11 @@ class Retrieve {
       return map_.find(key);
     }
 
-    void Success(Iterator it) {
+    void Erase(Iterator it) {
       map_.erase(it);
     }
+
+    bool Empty() const { return map_.empty(); }
 
     Iterator begin() { return map_.begin(); }
     Iterator end() { return map_.end(); }
@@ -233,17 +235,18 @@ class DocumentCallback {
   public:
     DocumentCallback(Retrieve &retrieve, Output &out) : retrieve_(retrieve), out_(out) {}
 
-    void operator()(const std::string &document) {
+    // Return true if there's more documents to get from the same WARC.
+    bool operator()(const std::string &document) {
       util::TokenIter<util::SingleCharacter, false> line(document, '\n');
       UTIL_THROW_IF(!line, MatchException, "Blank document");
       UTIL_THROW_IF(*line != "WARC/1.0\r", MatchException, "Expected WARC/1.0 header but got `" << *line << '\'');
       UTIL_THROW_IF(!++line, MatchException, "Nothing after WARC/1.0 header");
       if (*line == "WARC-Type: warcinfo\r") {
-        return;
+        return true;
       }
       util::StringPiece sha1 = FindSHA1(line);
       Retrieve::Iterator it = retrieve_.Lookup(sha1);
-      if (it == retrieve_.end()) return;
+      if (it == retrieve_.end()) return true;
       const std::vector<Extract> &extracts = it->second;
       assert(!extracts.empty());
       // Consume rest of the header.
@@ -253,8 +256,10 @@ class DocumentCallback {
       }
       ++line; // Skip blank.
       MatchLines(line, extracts, out_);
-      retrieve_.Success(it);
+      retrieve_.Erase(it);
+      return !retrieve_.Empty();
     }
+
   private:
     Retrieve &retrieve_;
     Output &out_;
@@ -262,12 +267,16 @@ class DocumentCallback {
 
 class CurlCallback {
   public:
-    CurlCallback(Retrieve &retrieve, Output &out) : document_(retrieve, out) {}
+    CurlCallback(Retrieve &retrieve, Output &out) : document_(retrieve, out), want_more_(true) {}
 
     size_t operator()(void *buffer, size_t length) {
       // As a C library, curl can't handle exceptions thrown by the callback.
       try {
-        warc_.GiveBytes(static_cast<const char*>(buffer), length, document_);
+        if (!warc_.GiveBytes(static_cast<const char*>(buffer), length, document_)) {
+          // Hang up early if all sentences from the WARC are complete.
+          want_more_ = false;
+          return 0;
+        }
       } catch (...) {
         exception_ = std::current_exception();
         return 0;
@@ -275,16 +284,18 @@ class CurlCallback {
       return length;
     }
 
-    void CheckException() {
+    bool CheckStatus() {
       if (exception_) {
         std::exception_ptr moved(std::move(exception_));
         std::rethrow_exception(moved);
       }
+      return want_more_;
     }
   private:
     preprocess::WARCStream warc_;
     DocumentCallback document_;
     std::exception_ptr exception_;
+    bool want_more_;
 };
 
 class CurlWrap {
@@ -304,9 +315,12 @@ class CurlWrap {
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_URL, url), MatchException, "CURL Could not set URL " << error_buffer_);
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &callback), MatchException, "CURL Could not set callback " << error_buffer_);
       CURLcode performed = curl_easy_perform(curl_);
-      callback.CheckException();
-      if (CURLE_OK == performed) return;
-      UTIL_THROW(MatchException, "CURL perform failed " << error_buffer_);
+      // Throw any exceptions gathered during execution.
+      if (!callback.CheckStatus()) {
+        // If the code got everything it wanted then hung up, don't worry about CURL status.
+        return;
+      }
+      UTIL_THROW_IF(CURLE_OK != performed, MatchException, "CURL perform failed " << error_buffer_);
     }
 
   private:
