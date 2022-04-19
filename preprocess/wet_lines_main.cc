@@ -357,7 +357,7 @@ void RunWARC(const char *url, CurlWrap &curl, Retrieve &retrieve, Output &out) {
   try {
     CurlCallback callback(retrieve, out);
     curl.Download(url, callback);
-  } catch (const Exception &e) {
+  } catch (const util::Exception &e) {
     for (Retrieve::Iterator i = retrieve.begin(); i != retrieve.end(); ++i) {
       for (const Extract &extract : i->second) {
         out.Failure(extract.original_line, e.what());
