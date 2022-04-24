@@ -15,7 +15,6 @@
 
 #include <curl/curl.h>
 #include <string.h>
-#include <time.h>
 
 // Thrown for errors finding a match that can mostly r
 class MatchException : public util::Exception {
@@ -103,6 +102,11 @@ class Output {
     }
     void Failure(util::StringPiece original_line, util::StringPiece what) {
       failure_ << original_line << '\t' << what << '\n';
+    }
+
+    void Flush() {
+      success_.flush();
+      failure_.flush();
     }
 
   private:
@@ -299,45 +303,6 @@ class CurlCallback {
     bool want_more_;
 };
 
-/* Cancel download if transfer rate is below min_rate (bytes per second) over a period of at least min_sec */
-class ProgressMonitor {
-  public:
-    ProgressMonitor(double min_rate, double min_sec) : last_bytes_(0), min_rate_(min_rate), min_sec_(min_sec), tripped_(false) {
-      UTIL_THROW_IF(clock_gettime(CLOCK_MONOTONIC_COARSE, &last_time_), util::ErrnoException, "clock_gettime; consider using CLOCK_MONOTONIC");
-    }
-
-    size_t operator()(curl_off_t dlnow) {
-      struct timespec now;
-      UTIL_THROW_IF(clock_gettime(CLOCK_MONOTONIC_COARSE, &now), util::ErrnoException, "clock_gettime");
-      double difference = (now.tv_sec - last_time_.tv_sec) + (now.tv_nsec - last_time_.tv_nsec) / 1000000000.0;
-      if (difference < min_sec_) {
-        // returning 0 here means keep downloading.
-        return 0;
-      }
-      last_time_ = now;
-      double rate = (dlnow - last_bytes_) / difference;
-      if (rate >= min_rate_) return 0;
-      tripped_ = true;
-      tripped_rate_ = rate;
-      tripped_interval_ = difference;
-      return 1;
-    }
-
-    void CheckStatus() {
-      UTIL_THROW_IF(tripped_, MatchException, "Download rate was " << tripped_rate_ << " bytes per second over " << tripped_interval_ << "s.  Minimum is " << min_rate_ << " over " << min_sec_ << "s");
-    }
-
-  private:
-    struct timespec last_time_;
-    curl_off_t last_bytes_;
-
-    double min_rate_, min_sec_;
-
-    bool tripped_;
-    double tripped_rate_;
-    double tripped_interval_;
-};
-
 class CurlWrap {
   public:
     CurlWrap() : curl_(curl_easy_init()) {
@@ -345,9 +310,11 @@ class CurlWrap {
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_ERRORBUFFER, error_buffer_), MatchException, "CURL Setting error buffer failed");
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, 1L), MatchException, "CURL Setting follow location failed " << error_buffer_);
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, Incoming), MatchException, "CURL Setting function failed " << error_buffer_);
-      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_XFERINFOFUNCTION, Progress), MatchException, "CURL Setting progress function failed " << error_buffer_);
-      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_NOPROGRESS, 0), MatchException, "CURL Setting progress checking failed " << error_buffer_);
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_USERAGENT, "wet lines extraction"), MatchException, "CURL User Agent setting failed " << error_buffer_);
+      // TODO make timeouts configurable
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_TIMEOUT, 60L), MatchException, "CURL timeout setting failed " << error_buffer_);
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_LOW_SPEED_LIMIT, 1048576L), MatchException, "CURL low setting low speed failed " << error_buffer_);
+      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_LOW_SPEED_TIME, 5L), MatchException, "CURL low setting low speed time failed " << error_buffer_);
     }
 
     ~CurlWrap() {
@@ -357,16 +324,12 @@ class CurlWrap {
     void Download(const char *url, CurlCallback &callback) {
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_URL, url), MatchException, "CURL Could not set URL " << error_buffer_);
       UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &callback), MatchException, "CURL Could not set callback " << error_buffer_);
-      // TODO: configurable rather than 1 MB/s minimum over 5s
-      ProgressMonitor monitor(1048576, 5.0);
-      UTIL_THROW_IF(CURLE_OK != curl_easy_setopt(curl_, CURLOPT_XFERINFODATA, &monitor), MatchException, "CURL Could not set progress callback " << error_buffer_);
       CURLcode performed = curl_easy_perform(curl_);
       // Throw any exceptions gathered during execution.
       if (!callback.CheckStatus()) {
         // If the code got everything it wanted then hung up, don't worry about CURL status.
         return;
       }
-      monitor.CheckStatus();
       UTIL_THROW_IF(CURLE_OK != performed, MatchException, "CURL perform failed " << error_buffer_);
     }
 
@@ -375,14 +338,9 @@ class CurlWrap {
       return (*static_cast<CurlCallback*>(ptr))(buffer, nmemb);
     }
 
-    static size_t Progress(void *ptr, curl_off_t /* dltotal */, curl_off_t dlnow, curl_off_t /* ultotal */, curl_off_t /*ulnow*/) {
-      return (*static_cast<ProgressMonitor*>(ptr))(dlnow);
-    }
-
     CURL *curl_;
 
     char error_buffer_[CURL_ERROR_SIZE];
-
 };
 
 void ParseLine(util::StringPiece line, util::StringPiece &wet_path, util::StringPiece &sha1, Extract &extract) {
@@ -421,6 +379,7 @@ void RunWARC(const char *url, CurlWrap &curl, Retrieve &retrieve, Output &out) {
       out.Failure(extract.original_line, "No error but unmatched");
     }
   }
+  out.Flush();
 }
 
 void ProcessMetadata(const util::StringPiece download_prefix, util::FilePiece &in, Output &out) {
