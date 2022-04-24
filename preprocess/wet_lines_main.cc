@@ -22,11 +22,11 @@ class MatchException : public util::Exception {
     void SetLocation(const char *file, unsigned int line, const char *func, const char * /*child_name*/, const char *condition) {
       std::string old_text;
       what_.swap(old_text);
-      what_ << file << ':' << line << '\t';
+      what_ << file << ':' << line << ' ';
       if (func) what_ << func;
-      what_ << '\t';
+      what_ << ' ';
       if (condition) what_ << condition;
-      what_ << '\t';
+      what_ << ' ';
       what_ << old_text;
     }
 };
