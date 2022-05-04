@@ -24,6 +24,7 @@ set(EXE_LIST
   remove_long_lines
   shard
   substitute
+  subtract_lines
   vocab
   warc_parallel
 )
