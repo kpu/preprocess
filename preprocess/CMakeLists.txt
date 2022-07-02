@@ -21,6 +21,7 @@ set(EXE_LIST
   mmhsum
   order_independent_hash
   remove_invalid_utf8
+  remove_invalid_utf8_base64
   remove_long_lines
   shard
   substitute
@@ -54,6 +55,7 @@ target_link_libraries(cache ${PREPROCESS_LIBS} fields captive_child)
 target_link_libraries(dedupe ${PREPROCESS_LIBS} fields)
 target_link_libraries(docenc ${PREPROCESS_LIBS} base64)
 target_link_libraries(foldfilter ${PREPROCESS_LIBS} captive_child)
+target_link_libraries(remove_invalid_utf8_base64 ${PREPROCESS_LIBS} base64)
 target_link_libraries(shard ${PREPROCESS_LIBS} fields)
 target_link_libraries(simple_cleaning ${PREPROCESS_LIBS} fields)
 target_link_libraries(substitute ${PREPROCESS_LIBS} fields)
