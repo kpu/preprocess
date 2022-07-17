@@ -31,6 +31,15 @@ template <class T, class Closer> class scoped_base {
     scoped_base(scoped_base &&from) noexcept : p_(from.p_) {
       from.p_ = nullptr;
     }
+    
+    scoped_base &operator=(scoped_base &&from) noexcept {
+      if (this != &from) {
+        Closer::Close(p_);
+        p_ = from.p_;
+        from.p_ = nullptr;
+      }
+      return *this;
+    }
 #endif
 
     void reset(T *p = NULL) {
