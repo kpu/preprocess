@@ -42,10 +42,59 @@ size_t find_delimiter(std::vector<char32_t> const &delimiters, char32_t characte
   return i - delimiters.begin();
 }
 
-std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util::StringPiece const &line, wrap_options const &options) {
-	std::deque<util::StringPiece> out_lines;
+class DelimiterList {
+  public:
+    explicit DelimiterList(const std::vector<util::StringPiece> &delims)
+      : size_(delims.size()), mem_(util::MallocOrThrow(size_ + SumLengths(delims))) {
+      char *strs = reinterpret_cast<char *>(mem_.get());
+      for (const util::StringPiece &delim : delims) {
+        memcpy(strs, delim.data(), delim.size());
+        strs[delim.size()] = 0;
+        strs += delim.size() + 1;
+      }
+    }
 
-	std::deque<std::string> out_delimiters;
+    DelimiterList() : size_(0) {}
+
+    class forward_iterator {
+      public:
+        forward_iterator(const DelimiterList &list)
+          : strings_(reinterpret_cast<const char *>(list.mem_.get())) {}
+
+        forward_iterator &operator++() {
+          strings_ += strlen(strings_) + 1;
+          return *this;
+        }
+
+        util::StringPiece operator*() const {
+          return util::StringPiece(strings_);
+        }
+
+      private:
+        const char *strings_;
+    };
+
+    size_t size() const { return size_; }
+
+  private:
+    // Number of strings.
+    size_t size_;
+
+    // The memory is null-delimited strings, size_ of them.
+    util::scoped_malloc mem_;
+
+    static size_t SumLengths(const std::vector<util::StringPiece> &delims) {
+      size_t ret = 0;
+      for (const util::StringPiece &i : delims) {
+        ret += i.size();
+      }
+      return ret;
+    }
+};
+
+void wrap_lines(util::StringPiece const &line, wrap_options const &options, std::deque<util::StringPiece> &out_lines, std::vector<util::StringPiece> &out_delimiters) {
+  out_lines.clear();
+  out_delimiters.clear();
 
 	// Current byte position
 	size_t pos = 0;
@@ -120,10 +169,10 @@ std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util
 
 		if (options.keep_delimiters_in_lines) {
 			out_lines.push_back(line.substr(pos_last_cut, pos_cut_end - pos_last_cut));
-			out_delimiters.emplace_back("");
+			out_delimiters.emplace_back(util::StringPiece("", 0));
 		} else {
 			out_lines.push_back(line.substr(pos_last_cut, pos_cut - pos_last_cut));
-			out_delimiters.emplace_back(line.substr(pos_cut, pos_cut_end - pos_cut).data(), pos_cut_end - pos_cut);
+			out_delimiters.emplace_back(util::StringPiece(line.data() + pos_cut, pos_cut_end - pos_cut));
 		}
 
 		pos_last_cut = pos_cut_end;
@@ -133,10 +182,8 @@ std::pair<std::deque<util::StringPiece>,std::deque<std::string>> wrap_lines(util
 	// Push out any trailing bits. Or the empty bit.
 	if (pos_last_cut < pos || pos == 0) {
 		out_lines.push_back(line.substr(pos_last_cut, pos - pos_last_cut));
-		out_delimiters.push_back("");
+		out_delimiters.push_back(util::StringPiece("", 0));
 	}
-
-	return std::make_pair(out_lines, out_delimiters);
 }
 
 int usage(char **argv) {
@@ -197,7 +244,7 @@ int main(int argc, char **argv) {
 
 	parse_options(options, argc, argv);
 
-	util::UnboundedSingleQueue<std::deque<std::string>> queue;
+	util::UnboundedSingleQueue<DelimiterList> queue;
 
 	util::scoped_fd child_in_fd, child_out_fd;
 
@@ -207,19 +254,20 @@ int main(int argc, char **argv) {
 		util::FilePiece in(STDIN_FILENO);
 		util::FileStream child_in(child_in_fd.release());
 
+		std::deque<util::StringPiece> lines;
+    std::vector<util::StringPiece> delimiters;
 		for (util::StringPiece sentence : in) {
-			std::deque<util::StringPiece> lines;
-			std::deque<std::string> delimiters;
 
 			// If there is nothing to wrap, it will end up with a single line
 			// and a single empty delimiter.
-			tie(lines, delimiters) = wrap_lines(sentence, options);
+			wrap_lines(sentence, options, lines, delimiters);
 			// assert(lines.size() == delimiters.size());
 
 			// When we're keeping delimiters all of these will be empty strings
 			// but their amount at least will tell the reader thread how many
 			// lines it needs to consume to reconstruct the single line.
-			queue.Produce(std::move(delimiters));
+      DelimiterList list(delimiters);
+			queue.Produce(std::move(list));
 
 			// Feed the document to the child.
 			// Might block because it can cause a flush.
@@ -238,7 +286,7 @@ int main(int argc, char **argv) {
 		util::FileStream out(STDOUT_FILENO);
 		util::FilePiece child_out(child_out_fd.release());
 
-		std::deque<std::string> delimiters;
+		DelimiterList delimiters;
 		std::string sentence;
 
 		for (size_t sentence_num = 1; queue.Consume(delimiters).size() > 0; ++sentence_num) {
@@ -249,11 +297,12 @@ int main(int argc, char **argv) {
 			sentence.reserve(delimiters.size() * 2 * options.column_width);
 
 			try {
-				while (!delimiters.empty()) {
+        DelimiterList::forward_iterator delimit(delimiters);
+        for (size_t i = 0; i < delimiters.size(); ++i, ++delimit) {
 					util::StringPiece line(child_out.ReadLine());
 					sentence.append(line.data(), line.length());
-					sentence.append(delimiters.front());
-					delimiters.pop_front();
+          util::StringPiece delimiter(*delimit);
+					sentence.append(delimiter.data(), delimiter.size());
 				}
 			} catch (util::EndOfFileException &e) {
 				UTIL_THROW(util::Exception, "Sub-process stopped producing while expecting more lines for sentence " << sentence_num << ".");
