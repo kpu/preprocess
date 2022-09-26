@@ -54,6 +54,7 @@ void Input(util::UnboundedSingleQueue<QueueEntry> &queue, util::scoped_fd &proce
     // Parse column numbers, if given using --key option, into an integer vector (comma separated integers)
     std::vector<FieldRange> indices;
     ParseFields(options.key.c_str(), indices);
+    DefragmentFields(indices);
     for (util::StringPiece l : util::FilePiece(STDIN_FILENO)) {
       HashWithSeed callback= HashWithSeed();
       RangeFields(l, indices, options.field_separator, callback);
