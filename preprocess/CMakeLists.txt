@@ -8,7 +8,7 @@ add_library(warc STATIC warc.cc)
 add_library(base64 STATIC base64.cc)
 
 add_executable(latency latency_main.cc)
-target_link_libraries(latency preprocess_util captive_child)
+target_link_libraries(latency preprocess_util captive_child -static)
 set_target_properties(latency PROPERTIES FOLDER executables)
 
 # Explicitly list the executable files to be compiled
