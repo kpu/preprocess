@@ -67,7 +67,7 @@ endif()
 
 # Group these objects together for later use.
 add_library(preprocess_util ${PREPROCESS_UTIL_DOUBLECONVERSION_SOURCE} ${PREPROCESS_UTIL_SOURCE})
-target_link_libraries(preprocess_util ${Boost_LIBRARIES} ${COMPRESS_LIBS} ${THREADS} ${TIMER_LINK})
+target_link_libraries(preprocess_util ${COMPRESS_LIBS} ${THREADS} ${TIMER_LINK})
 
 add_library(preprocess_icu utf8_icu.cc)
 target_link_libraries(preprocess_icu preprocess_util ${ICU_LIBRARIES})
