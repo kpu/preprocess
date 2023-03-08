@@ -148,7 +148,7 @@ template <class Compression> class ReadStream : public ReadBase {
 #ifdef HAVE_ZLIB
 class GZip {
   public:
-    static const std::size_t kSizeMax = static_cast<std::size_t>(std::numeric_limits<uInt>::max());
+    static const std::size_t kSizeMax;
 
     GZip() {
       stream_.zalloc = Z_NULL;
@@ -182,6 +182,8 @@ class GZip {
   protected:
     z_stream stream_;
 };
+
+const std::size_t GZip::kSizeMax = static_cast<std::size_t>(std::numeric_limits<uInt>::max());
 
 class GZipRead : public GZip {
   public:
@@ -236,7 +238,7 @@ class GZipWrite : public GZip {
       UTIL_THROW_IF(Z_OK != deflateReset(&stream_), GZException, "Trying to reset");
     }
 
-    static const std::size_t kMinOutput = 6; /* magic number in zlib.h to avoid multiple ends */
+    static const std::size_t kMinOutput;
 
     bool EnoughOutput() const {
       return AvailOutput() >= kMinOutput;
@@ -264,13 +266,15 @@ class GZipWrite : public GZip {
     }
 };
 
+const std::size_t GZipWrite::kMinOutput = 6; /* magic number in zlib.h to avoid multiple ends */
+
 namespace {
 #endif // HAVE_ZLIB
 
 #ifdef HAVE_BZLIB
 class BZip {
   public:
-    static const std::size_t kSizeMax = static_cast<std::size_t>(std::numeric_limits<unsigned int>::max());
+    static const std::size_t kSizeMax;
     BZip() {
       memset(&stream_, 0, sizeof(stream_));
     }
@@ -321,6 +325,8 @@ class BZip {
     bz_stream stream_;
 };
 
+const std::size_t BZip::kSizeMax = static_cast<std::size_t>(std::numeric_limits<unsigned int>::max());
+
 class BZipRead : public BZip {
   public:
     BZipRead(const void *base, std::size_t amount) : BZip() {
@@ -362,7 +368,7 @@ class BZipWrite : public BZip {
       }
     }
 
-    static const std::size_t kMinOutput = 1; /* seemingly no magic number? */
+    static const std::size_t kMinOutput;
 
     bool EnoughOutput() const {
       return AvailOutput() >= kMinOutput;
@@ -396,6 +402,8 @@ class BZipWrite : public BZip {
   private:
     int level_;
 };
+
+const std::size_t BZipWrite::kMinOutput = 1; /* seemingly no magic number? */
 
 #endif // HAVE_BZLIB
 
