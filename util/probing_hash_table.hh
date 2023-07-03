@@ -343,8 +343,8 @@ template <class EntryT, class HashT, class EqualT = std::equal_to<typename Entry
     typedef EqualT Equal;
 
     AutoProbing(std::size_t initial_size = 5, const Key &invalid = Key(), const Hash &hash_func = Hash(), const Equal &equal_func = Equal()) :
-      allocated_(Backend::Size(initial_size, 1.2)), mem_(allocated_, KeyIsRawZero(invalid)), backend_(mem_.get(), allocated_, invalid, hash_func, equal_func) {
-      threshold_ = std::min<std::size_t>(backend_.buckets_ - 1, backend_.buckets_ * 0.9);
+      allocated_(Backend::Size(initial_size, 1.4)), mem_(allocated_, KeyIsRawZero(invalid)), backend_(mem_.get(), allocated_, invalid, hash_func, equal_func) {
+      threshold_ = std::min<std::size_t>(backend_.buckets_ - 1, backend_.buckets_ * 0.75);
       if (!KeyIsRawZero(invalid)) {
         Clear();
       }
@@ -400,7 +400,7 @@ template <class EntryT, class HashT, class EqualT = std::equal_to<typename Entry
       HugeRealloc(backend_.DoubleTo(), KeyIsRawZero(backend_.invalid_), mem_);
       allocated_ = backend_.DoubleTo();
       backend_.Double(mem_.get(), !KeyIsRawZero(backend_.invalid_));
-      threshold_ = std::min<std::size_t>(backend_.buckets_ - 1, backend_.buckets_ * 0.9);
+      threshold_ = std::min<std::size_t>(backend_.buckets_ - 1, backend_.buckets_ * 0.75);
     }
 
     bool KeyIsRawZero(const Key &key) {
