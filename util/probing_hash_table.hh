@@ -393,10 +393,19 @@ template <class EntryT, class HashT, class EqualT = std::equal_to<typename Entry
       return backend_.RawEnd();
     }
 
+    void Reserve(size_t capacity) {
+      while (threshold_ < capacity)
+        Double();
+    }
+
   private:
     void DoubleIfNeeded() {
       if (UTIL_LIKELY(Size() < threshold_))
         return;
+      Double();
+    }
+
+    void Double() {
       HugeRealloc(backend_.DoubleTo(), KeyIsRawZero(backend_.invalid_), mem_);
       allocated_ = backend_.DoubleTo();
       backend_.Double(mem_.get(), !KeyIsRawZero(backend_.invalid_));
