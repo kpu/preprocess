@@ -96,12 +96,16 @@ if (-e "$prefixfile") {
 if ($MODE eq "base64documents") {
 	while (<STDIN>) {
 		my $line = decode_base64($_);
-		open(my $fh, "<utf8", \$line) or die $!;
-		print encode_base64(encode("UTF-8", &split_single_document($fh)), "") . "\n";
-		close($fh);
+		my $out = "";
+		{
+			open(local *STDIN, "<:encoding(UTF-8)", \$line) or die $!;
+			open(local *STDOUT, ">:encoding(UTF-8)", \$out) or die $!;
+			&split_single_document;
+		}
+		print(encode_base64($out, "") . "\n");
 	}
 } else {
-	print &split_single_document(*STDIN);
+	&split_single_document;
 }
 
 
@@ -109,18 +113,16 @@ sub split_single_document {
 	# Argument is an open file handle. Lines will be merged unless a line with
 	# just <P> or similar tag or a blank line. Or unless $KEEP_LINES
 	# is True.
-	my ($fh) = @_;
 	my $text = "";
-	my $out = "";
 	# Loop over text, add lines together until we get a blank line or a <p>
-	while (<$fh>) {
+	while (<STDIN>) {
 		chomp;
 		if ($KEEP_LINES) {
-			$out .= &split_block($_,"");
+			print &split_block($_,"");
 		} elsif (/^<.+>$/ || /^\s*$/) {
 			# Time to process this block; we've hit a blank or <p>
-			$out .= &split_block($text, $_);
-			$out .= "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
+			print &split_block($text, $_);
+			print "<P>\n" if $NOP == 0 && (/^\s*$/ && $text); ## If we have text followed by <P>
 			$text = "";
 		} else {
 			# Append the text, with a space.
@@ -128,8 +130,7 @@ sub split_single_document {
 		}
 	}
 	# Do the leftover text.
-	$out .= &split_block($text,"") if $text;
-	return $out;
+	print &split_block($text,"") if $text;
 }
 
 sub split_block {
@@ -275,7 +276,7 @@ sub preprocess {
 
 	# We stopped one token from the end to allow for easy look-ahead.
 	# Append it now.
-	$text = $text.$words[$i];
+	$text = $text.$words[$i] if scalar(@words) > 0;
 
 	# Clean up spaces at head and tail of each line as well as any double-spacing
 	$text =~ s/ +/ /g;
