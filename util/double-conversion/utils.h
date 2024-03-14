@@ -53,13 +53,25 @@
 // disabled.)
 // On Linux,x86 89255e-22 != Div_double(89255.0/1e22)
 #if defined(_M_X64) || defined(__x86_64__) || \
-    defined(__ARMEL__) || defined(__avr32__) || \
+    defined(__ARMEL__) || defined(__avr32__) || defined(_M_ARM) || defined(_M_ARM64) || \
     defined(__hppa__) || defined(__ia64__) || \
-    defined(__mips__) || defined(__powerpc__) || \
+    defined(__mips__) || \
+    defined(__loongarch__) || \
+    defined(__nios2__) || defined(__ghs) || \
+    defined(__powerpc__) || defined(__ppc__) || defined(__ppc64__) || \
+    defined(_POWER) || defined(_ARCH_PPC) || defined(_ARCH_PPC64) || \
     defined(__sparc__) || defined(__sparc) || defined(__s390__) || \
     defined(__SH4__) || defined(__alpha__) || \
-    defined(_MIPS_ARCH_MIPS32R2)
+    defined(_MIPS_ARCH_MIPS32R2) || defined(__ARMEB__) ||\
+    defined(__AARCH64EL__) || defined(__aarch64__) || defined(__AARCH64EB__) || \
+    defined(__riscv) || defined(__e2k__) || \
+    defined(__or1k__) || defined(__arc__) || defined(__ARC64__) || \
+    defined(__microblaze__) || defined(__XTENSA__) || \
+    defined(__EMSCRIPTEN__) || defined(__wasm32__)
 #define DOUBLE_CONVERSION_CORRECT_DOUBLE_OPERATIONS 1
+#elif defined(__mc68000__) || \
+    defined(__pnacl__) || defined(__native_client__)
+#undef DOUBLE_CONVERSION_CORRECT_DOUBLE_OPERATIONS
 #elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
 #if defined(_WIN32)
 // Windows uses a 64bit wide floating point stack.
@@ -70,7 +82,9 @@
 #else
 #error Target architecture was not detected as supported by Double-Conversion.
 #endif
-
+#if defined(DOUBLE_CONVERSION_NON_PREFIXED_MACROS) && !defined(CORRECT_DOUBLE_OPERATIONS)
+#define CORRECT_DOUBLE_OPERATIONS DOUBLE_CONVERSION_CORRECT_DOUBLE_OPERATIONS
+#endif
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 
