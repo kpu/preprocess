@@ -82,6 +82,14 @@ class scoped_memory {
       : data_(from.data_), size_(from.size_), source_(from.source_) {
       from.steal();
     }
+
+    scoped_memory &operator=(scoped_memory &&from) noexcept {
+      reset();
+      size_ = from.size_;
+      source_ = from.source_;
+      data_ = from.steal();
+      return *this;
+    }
 #endif
 
     ~scoped_memory() { reset(); }
